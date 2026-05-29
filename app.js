@@ -65,6 +65,10 @@ const progressContainer = document.getElementById('progress-container');
 let micStream = null, audioContext = null, musicRecorder = null, musicChunks = [], musicDest = null, mediaRecorder = null, audioChunks = [], activeAudioPlayers = [];
 
 async function init() {
+    if (localStorage.getItem('drag-n-film-version') !== '2.0-frames') {
+        localStorage.clear();
+        localStorage.setItem('drag-n-film-version', '2.0-frames');
+    }
     setupStage(); setupPalette(); bindEvents();
     if (sessionStorage.getItem('drag-n-film-reset') === 'true') { sessionStorage.removeItem('drag-n-film-reset'); localStorage.removeItem('drag-n-film-project'); }
     else await loadProject();
