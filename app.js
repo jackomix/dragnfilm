@@ -403,10 +403,10 @@ function onKeyDown(e) {
                 const octave = scene.musician.octaveOffset || 0;
                 playNote(scene, noteIndex, scene.musician.chordMode, octave); 
                 if (state.ui.isRecording && isMusicianActive) {
-                    const el = Date.now() - state.ui.playbackStartTime;
                     const rec = scene.musician.recordings[scene.musician.recordings.length - 1];
-                    if (!rec.frames) rec.frames = [];
-                    rec.frames.push({ time: el, note: noteIndex, chord: scene.musician.chordMode, octave: octave });
+                    const frame = state.ui.currentFrame;
+                    if (!rec.frames[frame]) rec.frames[frame] = [];
+                    rec.frames[frame].push({ note: noteIndex, chord: scene.musician.chordMode, octave: octave });
                 }
                 return; 
             }
@@ -422,8 +422,19 @@ function onKeyDown(e) {
         if (state.ui.activePanel === 'editor') { const t = state.ui.editingTarget; if (t && t.costumes[ki]) { state.ui.editingCostumeIndex = ki; state.ui.undoStack = []; state.ui.redoStack = []; updateUndoRedoButtons(); renderCostumeList(); loadCostumeToEditor(t.costumes[ki]); } return; }
         let t = (state.ui.selectedActorId === 'backdrop' ? scene.backdrop : (state.ui.selectedActorId === 'musician' ? scene.musician : scene.actors.find(a => a.id === state.ui.selectedActorId)));
         if (t && t.costumes && t.costumes[ki]) {
-            const rec = t.recordings[t.recordings.length - 1], has = rec && rec.frames.length > 0;
-            if (state.ui.isRecording || !has) { t.currentCostume = ki; if (state.ui.isRecording) { const el = Date.now() - state.ui.playbackStartTime; if (t.id === 'backdrop') { if (rec.frames.length === 0 || rec.frames[rec.frames.length - 1].time < el) rec.frames.push({ time: el, x: 0, y: 0, costumeIndex: ki }); else rec.frames[rec.frames.length - 1].costumeIndex = ki; } else if (t.id !== 'musician') { rec.frames.push({ time: el, x: t.x, y: t.y, costumeIndex: ki }); } } }
+            const rec = t.recordings[t.recordings.length - 1];
+            const has = rec && (Array.isArray(rec.frames) ? rec.frames.length > 0 : Object.keys(rec.frames).length > 0);
+            if (state.ui.isRecording || !has) { 
+                t.currentCostume = ki; 
+                if (state.ui.isRecording) { 
+                    const frame = state.ui.currentFrame; 
+                    if (t.id === 'backdrop') { 
+                        rec.frames[frame] = { x: 0, y: 0, costumeIndex: ki }; 
+                    } else if (t.id !== 'musician') { 
+                        rec.frames[frame] = { x: t.x, y: t.y, costumeIndex: ki }; 
+                    } 
+                } 
+            }
         }
     }
 }
@@ -569,10 +580,14 @@ function startRecordingProcess() {
     let count = 3; overlay.textContent = count; state.countdownTimer = setInterval(() => { count--; if (count > 0) overlay.textContent = count; else { clearInterval(state.countdownTimer); state.countdownTimer = null; overlay.classList.add('hidden'); startRecording(t); } }, 1000);
 }
 async function startRecording(t) { 
-    if (state.ui.dragMode !== 'hover' && !['backdrop', 'musician'].includes(t.id)) { const startState = getActorDisplayState(t, 0); t.x = startState.x; t.y = startState.y; t.currentCostume = startState.ci; }
-    state.ui.isRecording = true; document.getElementById('record-btn').textContent = '⏹️'; const newRec = { frames: [], audio: null }; t.recordings.push(newRec); 
-    if (!['musician'].includes(t.id)) newRec.frames.push({ time: 0, x: t.x, y: t.y, costumeIndex: t.currentCostume }); 
-    state.ui.playbackStartTime = Date.now(); playAllAudio();
+    state.ui.isRecording = true; document.getElementById('record-btn').textContent = '⏹️'; 
+    const isMusician = t.id === 'musician';
+    const newRec = { frames: isMusician ? {} : [], audio: null }; 
+    t.recordings.push(newRec); 
+    state.ui.currentFrame = 0;
+    state.ui.lastFrameTime = performance.now();
+    if (!isMusician) newRec.frames[0] = { x: t.x, y: t.y, costumeIndex: t.currentCostume }; 
+    playAllAudio();
     if (state.ui.micEnabled && micStream) { mediaRecorder = new MediaRecorder(micStream); audioChunks = []; mediaRecorder.ondataavailable = e => audioChunks.push(e.data); mediaRecorder.onstop = () => { const blob = new Blob(audioChunks, { type: 'audio/webm' }); t.recordings[t.recordings.length - 1].audio = URL.createObjectURL(blob); renderActorList(); }; mediaRecorder.start(); }
 }
 function stopRecording() { 
@@ -595,7 +610,9 @@ function togglePlayback(asTheater, startFromBeginning) {
         if (startFromBeginning) { state.project.currentSceneIndex = 0; if (asTheater) state.ui.isTitleCardActive = true; }
         state.ui.isPlaying = true; state.ui.selectedActorId = null;
         document.getElementById('play-btn').textContent = '⏹️'; document.getElementById('play-group').classList.add('is-playing');
-        state.ui.playbackStartTime = Date.now(); if (!state.ui.isTitleCardActive) playAllAudio();
+        state.ui.currentFrame = 0;
+        state.ui.lastFrameTime = performance.now();
+        if (!state.ui.isTitleCardActive) playAllAudio();
         renderActorList(); renderSceneList();
     }
 }
@@ -655,9 +672,7 @@ function playAllAudio() {
             if (!['backdrop', 'musician'].includes(t.id)) { 
                 const iv = setInterval(() => { 
                     if (audio.paused) { clearInterval(iv); return; } 
-                    const el = Date.now() - state.ui.playbackStartTime; 
-                    const frameIndex = Math.floor(el / FRAME_DURATION);
-                    const { x } = getActorDisplayState(t, frameIndex); 
+                    const { x } = getActorDisplayState(t, state.ui.currentFrame); 
                     panner.pan.value = ((x / state.project.width) * 2 - 1) * 0.5; 
                 }, 50); 
             } 
@@ -844,7 +859,7 @@ async function exportMovie(fullMovie, format) {
     const tcCanvas = document.createElement('canvas'); tcCanvas.width = state.project.width; tcCanvas.height = state.project.height;
     const tcCtx = tcCanvas.getContext('2d'); tcCtx.imageSmoothingEnabled = false;
     const scenesToExport = fullMovie ? state.project.scenes : [getCurrentScene()];
-    const durations = scenesToExport.map(s => getMaxDuration(s) || 500);
+    const durations = scenesToExport.map(s => (getMaxFrames(s) * FRAME_DURATION) || 500);
     const titleCardDuration = (fullMovie && state.project.showTitleCard) ? 2000 : 0;
     const totalDuration = durations.reduce((a, b) => a + b, titleCardDuration);
     togglePlayback(true, fullMovie);
