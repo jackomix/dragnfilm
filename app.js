@@ -307,8 +307,8 @@ function getMaxFrames(scene) {
         const rec = t.recordings[t.recordings.length - 1];
         if (rec && rec.frames) {
             const keys = Object.keys(rec.frames).map(Number);
-            const last = Array.isArray(rec.frames) ? rec.frames.length - 1 : (keys.length > 0 ? Math.max(...keys) : 0);
-            if (last > max) max = last;
+            const count = Array.isArray(rec.frames) ? rec.frames.length : (keys.length > 0 ? Math.max(...keys) + 1 : 0);
+            if (count > max) max = count;
         }
     });
     return max;
@@ -807,7 +807,17 @@ function floodFill(sx, sy, color) { const ctx = editorCanvas.getContext('2d'), i
 function hexToRgb(hex) { const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex); return r ? { r: parseInt(r[1], 16), g: parseInt(r[2], 16), b: parseInt(r[3], 16) } : { r: 0, g: 0, b: 0 }; }
 
 async function saveProject() { if (state.ui.isResetting) return; const scenes = await Promise.all(state.project.scenes.map(async s => ({ name: s.name, backdrop: await serializeTarget(s.backdrop), musician: { ...s.musician, recordings: await Promise.all(s.musician.recordings.map(serializeRecording)) }, actors: await Promise.all(s.actors.map(serializeTarget)) }))); localStorage.setItem('drag-n-film-project', JSON.stringify({ width: state.project.width, height: state.project.height, currentSceneIndex: state.project.currentSceneIndex, movieTitle: state.project.movieTitle, creatorName: state.project.creatorName, fontStyle: state.project.fontStyle, titleBgColor: state.project.titleBgColor, titleTextColor: state.project.titleTextColor, showTitleCard: state.project.showTitleCard, scenes })); }
-async function serializeRecording(r) { let audioData = null; if (r.audio) { try { const response = await fetch(r.audio); const blob = await response.blob(); audioData = await blobToDataURL(blob); } catch(e) { console.error(e); } } return { frames: r.frames, audioData }; }
+async function serializeRecording(r) { 
+    let audioData = null; 
+    if (r.audio) { 
+        try { 
+            const response = await fetch(r.audio); 
+            const blob = await response.blob(); 
+            audioData = await blobToDataURL(blob); 
+        } catch(e) { console.error(e); } 
+    } 
+    return { frames: r.frames || [], audioData }; 
+}
 async function serializeTarget(t) { return { id: t.id, name: t.name, currentCostume: t.currentCostume, x: t.x, y: t.y, costumes: t.costumes.map(c => ({ name: c.name, data: c.canvas.toDataURL() })), recordings: await Promise.all(t.recordings.map(serializeRecording)) }; }
 function blobToDataURL(blob) { return new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(blob); }); }
 async function loadProject() { const data = localStorage.getItem('drag-n-film-project'); if (!data) return; const p = JSON.parse(data); state.project.width = p.width; state.project.height = p.height; state.project.currentSceneIndex = p.currentSceneIndex || 0; state.project.movieTitle = p.movieTitle || "My Movie"; state.project.creatorName = p.creatorName || "Me"; state.project.fontStyle = p.fontStyle || "Arial"; state.project.titleBgColor = p.titleBgColor || "#ffffff"; state.project.titleTextColor = p.titleTextColor || "#000000"; state.project.showTitleCard = p.showTitleCard !== undefined ? p.showTitleCard : true; state.project.scenes = await Promise.all(p.scenes.map(async s => ({ name: s.name, backdrop: await deserializeTarget(s.backdrop), musician: await deserializeMusician(s.musician), actors: await Promise.all(s.actors.map(deserializeTarget)) }))); }
@@ -818,14 +828,21 @@ async function deserializeMusician(m) {
     res.recordings = await Promise.all((m.recordings || []).map(deserializeRecording)); 
     return res; 
 }
-async function deserializeRecording(r) { let audio = null; if (r.audioData) { const parts = r.audioData.split(','), byteString = atob(parts[1]), mimeString = parts[0].split(':')[1].split(';')[0], ab = new ArrayBuffer(byteString.length), ia = new Uint8Array(ab); for (let i=0; i<byteString.length; i++) ia[i] = byteString.charCodeAt(i); audio = URL.createObjectURL(new Blob([ab], {type: mimeString})); } return { frames: r.frames, audio }; }
+async function deserializeRecording(r) { 
+    let audio = null; 
+    if (r.audioData) { 
+        const parts = r.audioData.split(','), byteString = atob(parts[1]), mimeString = parts[0].split(':')[1].split(';')[0], ab = new ArrayBuffer(byteString.length), ia = new Uint8Array(ab); 
+        for (let i=0; i<byteString.length; i++) ia[i] = byteString.charCodeAt(i); 
+        audio = URL.createObjectURL(new Blob([ab], {type: mimeString})); 
+    } 
+    return { frames: r.frames || [], audio }; 
+}
 async function deserializeTarget(t) { const target = { ...t }; target.costumes = await Promise.all(t.costumes.map(async c => { const canvas = document.createElement('canvas'), img = new Image(); img.src = c.data; await new Promise(r => img.onload = r); canvas.width = img.width; canvas.height = img.height; const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.drawImage(img, 0, 0); return { name: c.name, canvas }; })); target.recordings = await Promise.all((t.recordings || []).map(deserializeRecording)); return target; }
 
-function renderProjectFrame(ctx, el, width, height, scale, scene) { 
+function renderProjectFrame(ctx, frameIndex, width, height, scale, scene) { 
     ctx.fillStyle = "white"; ctx.fillRect(0, 0, width, height); 
     const bd = scene.backdrop, bdRec = bd.recordings[bd.recordings.length - 1]; 
     let bdCI = bd.currentCostume; 
-    const frameIndex = Math.floor(el / FRAME_DURATION);
     if (bdRec) { const f = bdRec.frames[frameIndex]; if (f) bdCI = f.costumeIndex; } 
     if (bd.costumes[bdCI]) ctx.drawImage(bd.costumes[bdCI].canvas, 0, 0, width, height); 
     for (let i = scene.actors.length - 1; i >= 0; i--) { 
@@ -859,64 +876,64 @@ async function exportMovie(fullMovie, format) {
     const tcCanvas = document.createElement('canvas'); tcCanvas.width = state.project.width; tcCanvas.height = state.project.height;
     const tcCtx = tcCanvas.getContext('2d'); tcCtx.imageSmoothingEnabled = false;
     const scenesToExport = fullMovie ? state.project.scenes : [getCurrentScene()];
-    const durations = scenesToExport.map(s => (getMaxFrames(s) * FRAME_DURATION) || 500);
-    const titleCardDuration = (fullMovie && state.project.showTitleCard) ? 2000 : 0;
-    const totalDuration = durations.reduce((a, b) => a + b, titleCardDuration);
+    const durations = scenesToExport.map(s => getMaxFrames(s) || 30);
+    const titleCardDurationFrames = (fullMovie && state.project.showTitleCard) ? 120 : 0;
+    const totalFrames = durations.reduce((a, b) => a + b, titleCardDurationFrames);
     togglePlayback(true, fullMovie);
     if (format === 'video') {
         const stream = expCanvas.captureStream(30), audioCtx = new AudioContext(), dest = audioCtx.createMediaStreamDestination();
         const exportPlayers = [];
-        let timeOffset = titleCardDuration;
+        let frameOffset = titleCardDurationFrames;
         scenesToExport.forEach((scene, si) => {
             [scene.backdrop, ...scene.actors].forEach(t => {
                 const rec = t.recordings[t.recordings.length - 1]; if (rec && rec.audio) {
-
                     const audio = new Audio(rec.audio), source = audioCtx.createMediaElementSource(audio), panner = audioCtx.createStereoPanner();
-                    source.connect(panner); panner.connect(dest); exportPlayers.push({ audio, panner, target: t, startTime: timeOffset, duration: durations[si] });
+                    source.connect(panner); panner.connect(dest); 
+                    exportPlayers.push({ audio, panner, target: t, startFrame: frameOffset, durationFrames: durations[si] });
                 }
-            }); timeOffset += durations[si];
+            }); frameOffset += durations[si];
         });
         const recorder = new MediaRecorder(exportPlayers.length > 0 ? new MediaStream([...stream.getVideoTracks(), ...dest.stream.getAudioTracks()]) : stream, { mimeType: 'video/webm' }), chunks = [];
         recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
         recorder.onstop = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })); a.download = fullMovie ? 'movie.webm' : 'scene.webm'; a.click(); exportPlayers.forEach(p => p.audio.pause()); audioCtx.close(); };
-        recorder.start(); const startWallTime = Date.now();
-        let lastExportAudioTime = 0;
+        recorder.start(); 
+        
+        let currentFrame = 0;
         let lastExportSI = -1;
 
         const interval = setInterval(() => {
-            const totalElapsed = Date.now() - startWallTime;
-            if (!state.ui.isPlaying || totalElapsed >= totalDuration) { if (state.ui.isPlaying) togglePlayback(); recorder.stop(); clearInterval(interval); return; }
-            if (totalElapsed < titleCardDuration) { tcCtx.clearRect(0,0,tcCanvas.width, tcCanvas.height); drawTitleCard(tcCtx, 0); expCtx.drawImage(tcCanvas, 0, 0, expCanvas.width, expCanvas.height); }
+            if (!state.ui.isPlaying || currentFrame >= totalFrames) { if (state.ui.isPlaying) togglePlayback(); recorder.stop(); clearInterval(interval); return; }
+            if (currentFrame < titleCardDurationFrames) { tcCtx.clearRect(0,0,tcCanvas.width, tcCanvas.height); drawTitleCard(tcCtx, 0); expCtx.drawImage(tcCanvas, 0, 0, expCanvas.width, expCanvas.height); }
             else {
-                let remaining = totalElapsed - titleCardDuration, currentSI = 0; while (remaining >= durations[currentSI] && currentSI < scenesToExport.length - 1) { remaining -= durations[currentSI]; currentSI++; }
-                
-                // If scene changed during export, reset the procedural audio clock
-                if (currentSI !== lastExportSI) { lastExportAudioTime = 0; lastExportSI = currentSI; }
+                let remaining = currentFrame - titleCardDurationFrames, currentSI = 0; while (remaining >= durations[currentSI] && currentSI < scenesToExport.length - 1) { remaining -= durations[currentSI]; currentSI++; }
+                if (currentSI !== lastExportSI) { lastExportSI = currentSI; }
                 
                 renderProjectFrame(expCtx, remaining, expCanvas.width, expCanvas.height, upScale, scenesToExport[currentSI]);
-                
-                // Procedural Music for export - route to the MediaRecorder's audio context and destination
-                triggerMusicEvents(scenesToExport[currentSI], Math.floor(remaining / FRAME_DURATION), audioCtx, dest);
-                lastExportAudioTime = remaining;
+                triggerMusicEvents(scenesToExport[currentSI], remaining, audioCtx, dest);
 
                 exportPlayers.forEach(p => {
-                    if (totalElapsed >= p.startTime && totalElapsed < p.startTime + p.duration) {
-                        if (p.audio.paused) p.audio.play();
+                    if (currentFrame >= p.startFrame && currentFrame < p.startFrame + p.durationFrames) {
+                        if (p.audio.paused) {
+                            p.audio.currentTime = (currentFrame - p.startFrame) * FRAME_DURATION / 1000;
+                            p.audio.play();
+                        }
                         if (p.target.id !== 'backdrop' && p.target.id !== 'musician') {
-                            const rec = p.target.recordings[p.target.recordings.length - 1]; let x = p.target.x; if (rec?.frames?.length > 0) { const f = rec.frames[Math.floor((totalElapsed - p.startTime) / FRAME_DURATION)]; if (f) x = f.x; }
+                            const { x } = getActorDisplayState(p.target, currentFrame - p.startFrame);
                             p.panner.pan.value = ((x / state.project.width) * 2 - 1) * 0.5;
                         }
                     } else if (!p.audio.paused) { p.audio.pause(); }
                 });
             }
-        }, 1000/30);
+            currentFrame++;
+        }, 1000/60);
     } else {
         const { GIFEncoder, quantize, applyPalette } = await import('https://unpkg.com/gifenc?module');
-        const fps = 15, delay = 1000 / fps, gif = GIFEncoder();
-        for (let t = 0; t < totalDuration; t += delay) {
-            if (t < titleCardDuration) { tcCtx.clearRect(0,0,tcCanvas.width, tcCanvas.height); drawTitleCard(tcCtx, 0); expCtx.drawImage(tcCanvas, 0, 0, expCanvas.width, expCanvas.height); }
+        const fps = 15, framesPerGifFrame = 60 / fps, delay = 1000 / fps, gif = GIFEncoder();
+        for (let f = 0; f < totalFrames; f += framesPerGifFrame) {
+            const currentFrame = Math.floor(f);
+            if (currentFrame < titleCardDurationFrames) { tcCtx.clearRect(0,0,tcCanvas.width, tcCanvas.height); drawTitleCard(tcCtx, 0); expCtx.drawImage(tcCanvas, 0, 0, expCanvas.width, expCanvas.height); }
             else {
-                let remaining = t - titleCardDuration, currentSI = 0; while (remaining >= durations[currentSI] && currentSI < scenesToExport.length - 1) { remaining -= durations[currentSI]; currentSI++; }
+                let remaining = currentFrame - titleCardDurationFrames, currentSI = 0; while (remaining >= durations[currentSI] && currentSI < scenesToExport.length - 1) { remaining -= durations[currentSI]; currentSI++; }
                 renderProjectFrame(expCtx, remaining, expCanvas.width, expCanvas.height, upScale, scenesToExport[currentSI]);
             }
             const { data, width, height } = expCtx.getImageData(0, 0, expCanvas.width, expCanvas.height), palette = quantize(data, 256), index = applyPalette(data, palette);
