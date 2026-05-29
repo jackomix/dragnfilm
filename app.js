@@ -107,19 +107,21 @@ function setupStage() {
     requestAnimationFrame(renderLoop);
 }
 
-function getActorDisplayState(actor, elapsed) {
+function getActorDisplayState(actor, frameIndex) {
     if (!actor) return { x: 0, y: 0, ci: 0 };
     let x = actor.x, y = actor.y, ci = actor.currentCostume;
     const rec = actor.recordings[actor.recordings.length - 1];
-    const hasFrames = rec && rec.frames?.length > 0;
-    if (state.ui.isPlaying || state.ui.isRecording) {
-        if (hasFrames) { const f = findFrameAtTime(rec.frames, elapsed); if (f) { x = f.x; y = f.y; ci = f.costumeIndex; } }
-    } else if (hasFrames) { x = rec.frames[0].x; y = rec.frames[0].y; ci = rec.frames[0].costumeIndex; }
+    const frameData = rec && rec.frames ? rec.frames[frameIndex] : null;
     
-    // Override with live cursor/dragging position
+    if (state.ui.isPlaying || state.ui.isRecording) {
+        if (frameData) { x = frameData.x; y = frameData.y; ci = frameData.costumeIndex; }
+    } else if (rec && rec.frames?.length > 0) {
+        const first = rec.frames[0];
+        if (first) { x = first.x; y = first.y; ci = first.costumeIndex; }
+    }
+    
     const isDragging = draggedActor && draggedActor.id === actor.id;
-    const isHovering = state.ui.dragMode === 'hover' && (state.ui.isRecording || state.countdownTimer) && state.ui.selectedActorId === actor.id;
-    if (isDragging || isHovering) { x = actor.x; y = actor.y; ci = actor.currentCostume; }
+    if (isDragging) { x = actor.x; y = actor.y; ci = actor.currentCostume; }
     
     return { x, y, ci };
 }
@@ -150,12 +152,10 @@ function renderLoop() {
         state.ui.lastFrameTime = now;
     }
 
-    const elapsed = state.ui.currentFrame * FRAME_DURATION;
     const titleCardDurationFrames = state.project.showTitleCard ? 120 : 0;
     const maxFrames = getMaxFrames(scene) || 30;
 
-    const maxTime = getMaxDuration(scene) || 500;
-    updateProgressBarUI(elapsed, maxTime);
+    updateProgressBarUI(state.ui.currentFrame, maxFrames);
 
     if (state.ui.isTheaterMode && state.ui.isTitleCardActive && state.project.showTitleCard) {
         if (state.ui.currentFrame < titleCardDurationFrames) {
@@ -194,7 +194,7 @@ function renderLoop() {
     let bdCostumeIndex = bd.currentCostume;
     const bdRec = bd.recordings[bd.recordings.length - 1];
     if (state.ui.isPlaying || state.ui.isRecording) {
-        if (bdRec) { const frame = findFrameAtTime(bdRec.frames, elapsed); if (frame) bdCostumeIndex = frame.costumeIndex; }
+        if (bdRec) { const frame = bdRec.frames[state.ui.currentFrame]; if (frame) bdCostumeIndex = frame.costumeIndex; }
     } else if (bdRec && bdRec.frames?.length > 0) { bdCostumeIndex = bdRec.frames[0].costumeIndex; }
     if (bd.costumes[bdCostumeIndex]) ctx.drawImage(bd.costumes[bdCostumeIndex].canvas, margin, margin);
     
@@ -202,7 +202,7 @@ function renderLoop() {
         ctx.save(); ctx.beginPath(); ctx.rect(0, 0, stage.width, stage.height); ctx.rect(margin, margin, state.project.width, state.project.height); ctx.clip('evenodd');
         for (let i = scene.actors.length - 1; i >= 0; i--) {
             const actor = scene.actors[i];
-            const { x, y, ci } = getActorDisplayState(actor, elapsed);
+            const { x, y, ci } = getActorDisplayState(actor, state.ui.currentFrame);
             const costume = actor.costumes[ci];
             if (costume) {
                 const dx = margin + x - costume.canvas.width / 2, dy = margin + y - costume.canvas.height / 2;
@@ -216,11 +216,11 @@ function renderLoop() {
 
     for (let i = scene.actors.length - 1; i >= 0; i--) {
         const actor = scene.actors[i];
-        const { x, y, ci } = getActorDisplayState(actor, elapsed);
+        const { x, y, ci } = getActorDisplayState(actor, state.ui.currentFrame);
         const isSelected = state.ui.selectedActorId === actor.id;
         const isHoverRec = state.ui.dragMode === 'hover' && state.ui.isRecording && isSelected;
         const isDragRec = state.ui.isRecording && draggedActor && draggedActor.id === actor.id;
-        if (isHoverRec || isDragRec) { const rec = actor.recordings[actor.recordings.length - 1]; rec.frames.push({ time: elapsed, x, y, costumeIndex: ci }); }
+        if (isHoverRec || isDragRec) { const rec = actor.recordings[actor.recordings.length - 1]; rec.frames[state.ui.currentFrame] = { x, y, costumeIndex: ci }; }
         const costume = actor.costumes[ci];
         if (costume) {
             const dx = margin + x - costume.canvas.width / 2, dy = margin + y - costume.canvas.height / 2;
@@ -274,8 +274,8 @@ function drawBoilingText(ctx, text, x, y, color) {
     ctx.textAlign = originalAlign;
 }
 
-function updateProgressBarUI(elapsed, maxTime) {
-    const scenes = state.project.scenes, durations = scenes.map(s => getMaxDuration(s) || 500), total = durations.reduce((a, b) => a + b, 0);
+function updateProgressBarUI(currentFrame, maxFrames) {
+    const scenes = state.project.scenes, durations = scenes.map(s => getMaxFrames(s) || 30), total = durations.reduce((a, b) => a + b, 0);
     progressContainer.innerHTML = '';
     durations.forEach((dur, i) => {
         const wp = (dur / total) * 100, seg = document.createElement('div'); seg.className = 'movie-progress-segment'; seg.style.width = wp + '%';
@@ -288,7 +288,7 @@ function updateProgressBarUI(elapsed, maxTime) {
         else if (i < state.project.currentSceneIndex) fill.style.width = '100%';
         else if (i === state.project.currentSceneIndex) {
             const isActive = state.ui.isPlaying || state.ui.isRecording;
-            fill.style.width = isActive ? Math.min(100, (elapsed / dur * 100)) + '%' : '0%';
+            fill.style.width = isActive ? Math.min(100, (currentFrame / dur * 100)) + '%' : '0%';
         } else fill.style.width = '0%';
         seg.appendChild(fill); progressContainer.appendChild(seg);
     });
@@ -306,23 +306,21 @@ function getMaxFrames(scene) {
     [scene.backdrop, scene.musician, ...scene.actors].forEach(t => {
         const rec = t.recordings[t.recordings.length - 1];
         if (rec && rec.frames) {
-            const last = Array.isArray(rec.frames) ? rec.frames.length - 1 : 0;
+            const keys = Object.keys(rec.frames).map(Number);
+            const last = Array.isArray(rec.frames) ? rec.frames.length - 1 : (keys.length > 0 ? Math.max(...keys) : 0);
             if (last > max) max = last;
         }
     });
     return max;
 }
 
-function findFrameAtTime(frames, time) { if (!frames || frames.length === 0) return null; let best = frames[0]; for (let f of frames) { if (f.time <= time) best = f; else break; } return best; }
-function getMaxDuration(scene) { let max = 0; if (!scene) return 0; [scene.backdrop, scene.musician, ...scene.actors].forEach(t => { const rec = t.recordings[t.recordings.length - 1]; if (rec && rec.frames.length > 0) { const last = rec.frames[rec.frames.length - 1]; if (last.time > max) max = last.time; } }); return max; }
-
 function onStageMouseDown(e) {
     if (state.ui.activePanel === 'editor' || state.ui.isPlaying) return;
     const rect = stage.getBoundingClientRect(), sx = stage.width / rect.width, sy = stage.height / rect.height;
     const mx = (e.clientX - rect.left) * sx - state.ui.stageMargin, my = (e.clientY - rect.top) * sy - state.ui.stageMargin;
-    let hit = false, scene = getCurrentScene(), el = (state.ui.isPlaying || state.ui.isRecording) ? Date.now() - state.ui.playbackStartTime : 0;
+    let hit = false, scene = getCurrentScene(), frameIndex = state.ui.currentFrame;
     for (let i = 0; i < scene.actors.length; i++) {
-        const a = scene.actors[i], { x, y, ci } = getActorDisplayState(a, el), c = a.costumes[ci], ax = x - c.canvas.width / 2, ay = y - c.canvas.height / 2;
+        const a = scene.actors[i], { x, y, ci } = getActorDisplayState(a, frameIndex), c = a.costumes[ci], ax = x - c.canvas.width / 2, ay = y - c.canvas.height / 2;
         if (mx >= ax && mx <= ax + c.canvas.width && my >= ay && my <= ay + c.canvas.height) {
             const px = Math.floor(mx - ax), py = Math.floor(my - ay);
             if (px >= 0 && px < c.canvas.width && py >= 0 && py < c.canvas.height) {
@@ -632,15 +630,16 @@ function playNote(scene, noteIndex, isChord, octaveOffset = 0, ctx = null, dest 
     });
 }
 
-function triggerMusicEvents(scene, elapsed, lastTime, ctx = null, dest = null) {
+function triggerMusicEvents(scene, frameIndex, ctx = null, dest = null) {
     const rec = scene.musician.recordings[scene.musician.recordings.length - 1];
     if (!rec || !rec.frames) return;
 
-    rec.frames.forEach(f => {
-        if (f.time > lastTime && f.time <= elapsed) {
+    const events = rec.frames[frameIndex];
+    if (events && Array.isArray(events)) {
+        events.forEach(f => {
             playNote(scene, f.note, f.chord, f.octave || 0, ctx, dest);
-        }
-    });
+        });
+    }
 }
 
 function playAllAudio() {
@@ -657,7 +656,8 @@ function playAllAudio() {
                 const iv = setInterval(() => { 
                     if (audio.paused) { clearInterval(iv); return; } 
                     const el = Date.now() - state.ui.playbackStartTime; 
-                    const { x } = getActorDisplayState(t, el); 
+                    const frameIndex = Math.floor(el / FRAME_DURATION);
+                    const { x } = getActorDisplayState(t, frameIndex); 
                     panner.pan.value = ((x / state.project.width) * 2 - 1) * 0.5; 
                 }, 50); 
             } 
@@ -810,10 +810,11 @@ function renderProjectFrame(ctx, el, width, height, scale, scene) {
     ctx.fillStyle = "white"; ctx.fillRect(0, 0, width, height); 
     const bd = scene.backdrop, bdRec = bd.recordings[bd.recordings.length - 1]; 
     let bdCI = bd.currentCostume; 
-    if (bdRec) { const f = findFrameAtTime(bdRec.frames, el); if (f) bdCI = f.costumeIndex; } 
+    const frameIndex = Math.floor(el / FRAME_DURATION);
+    if (bdRec) { const f = bdRec.frames[frameIndex]; if (f) bdCI = f.costumeIndex; } 
     if (bd.costumes[bdCI]) ctx.drawImage(bd.costumes[bdCI].canvas, 0, 0, width, height); 
     for (let i = scene.actors.length - 1; i >= 0; i--) { 
-        const a = scene.actors[i], { x, y, ci } = getActorDisplayState(a, el), c = a.costumes[ci]; 
+        const a = scene.actors[i], { x, y, ci } = getActorDisplayState(a, frameIndex), c = a.costumes[ci]; 
         if (c) ctx.drawImage(c.canvas, (x - c.canvas.width/2) * scale, (y - c.canvas.height/2) * scale, c.canvas.width * scale, c.canvas.height * scale); 
     } 
 }
@@ -880,14 +881,14 @@ async function exportMovie(fullMovie, format) {
                 renderProjectFrame(expCtx, remaining, expCanvas.width, expCanvas.height, upScale, scenesToExport[currentSI]);
                 
                 // Procedural Music for export - route to the MediaRecorder's audio context and destination
-                triggerMusicEvents(scenesToExport[currentSI], remaining, lastExportAudioTime, audioCtx, dest);
+                triggerMusicEvents(scenesToExport[currentSI], Math.floor(remaining / FRAME_DURATION), audioCtx, dest);
                 lastExportAudioTime = remaining;
 
                 exportPlayers.forEach(p => {
                     if (totalElapsed >= p.startTime && totalElapsed < p.startTime + p.duration) {
                         if (p.audio.paused) p.audio.play();
                         if (p.target.id !== 'backdrop' && p.target.id !== 'musician') {
-                            const rec = p.target.recordings[p.target.recordings.length - 1]; let x = p.target.x; if (rec?.frames?.length > 0) { const f = findFrameAtTime(rec.frames, totalElapsed - p.startTime); if (f) x = f.x; }
+                            const rec = p.target.recordings[p.target.recordings.length - 1]; let x = p.target.x; if (rec?.frames?.length > 0) { const f = rec.frames[Math.floor((totalElapsed - p.startTime) / FRAME_DURATION)]; if (f) x = f.x; }
                             p.panner.pan.value = ((x / state.project.width) * 2 - 1) * 0.5;
                         }
                     } else if (!p.audio.paused) { p.audio.pause(); }
