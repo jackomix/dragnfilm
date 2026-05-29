@@ -25,6 +25,7 @@ const state = {
         currentFrame: 0,
         lastFrameTime: 0,
         timeAccumulator: 0,
+        songFrameOffset: 0,
         selectedActorId: null, 
         micEnabled: false, pencilSize: 5,
         stageMargin: 500, 
@@ -171,12 +172,12 @@ function renderLoop() {
             currentStep++;
             
             if (!state.ui.isTitleCardActive) {
-                triggerMusicEvents(scene, state.ui.currentFrame);
                 const song = scene.songId ? state.project.songs.find(s => s.id === scene.songId) : null;
                 if (song) {
-                    const framesPerSub = (60 * FPS) / (song.bpm * 2); // 8th notes
-                    const currentSub = Math.floor(state.ui.currentFrame / framesPerSub);
-                    const lastSub = Math.floor((state.ui.currentFrame - 1) / framesPerSub);
+                    const framesPerSub = (60 * FPS) / (song.bpm * 2); 
+                    const songFrame = state.ui.currentFrame + state.ui.songFrameOffset;
+                    const currentSub = Math.floor(songFrame / framesPerSub);
+                    const lastSub = Math.floor((songFrame - 1) / framesPerSub);
                     
                     if (currentSub !== lastSub) {
                         const loopSub = currentSub % (song.bars * 8);
@@ -244,17 +245,27 @@ function renderLoop() {
 
     if (state.ui.isPlaying && state.ui.currentFrame >= maxFrames) {
         if (state.project.currentSceneIndex < state.project.scenes.length - 1) {
-            stopAllAudio();
+            const currentSongId = scene.songId;
             state.project.currentSceneIndex++;
+            const nextScene = getCurrentScene();
+
+            if (nextScene.songId === currentSongId && currentSongId !== null) {
+                state.ui.songFrameOffset += maxFrames;
+            } else {
+                stopAllAudio();
+                state.ui.songFrameOffset = 0;
+                playAllAudio();
+            }
+
             state.ui.currentFrame = 0;
             state.ui.lastFrameTime = performance.now();
-            playAllAudio();
-            renderActorList();
             renderSceneList();
+            renderActorList();
         } else {
             togglePlayback();
         }
     }
+
 
     let bdCostumeIndex = bd.currentCostume;
     const bdRec = bd.recordings[bd.recordings.length - 1];
@@ -416,36 +427,6 @@ const scales = {
 };
 const keyFrequencies = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-function playNote(scene, noteIndex, isChord) {
-    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioContext.state === 'suspended') audioContext.resume();
-    const mu = scene.musician;
-    const inst = instruments[mu.instrument];
-    const baseFreq = 261.63 * Math.pow(2, keyFrequencies.indexOf(mu.key) / 12);
-    const scale = scales[mu.scale];
-    const octave = mu.octaveOffset || 0;
-    
-    const notes = isChord ? [noteIndex, (noteIndex + 2), (noteIndex + 4)] : [noteIndex];
-    
-    notes.forEach(ni => {
-        const osc = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        const noteShift = scale[ni % scale.length] + Math.floor(ni / scale.length) * 12 + (octave * 12);
-        osc.frequency.value = baseFreq * Math.pow(2, noteShift / 12);
-        osc.type = inst.type;
-        
-        // Connect to BOTH the monitor and the recorder destination
-        osc.connect(gain);
-        gain.connect(audioContext.destination);
-        if (musicDest) gain.connect(musicDest);
-        
-        const now = audioContext.currentTime;
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-        osc.start(); osc.stop(now + 0.5);
-    });
-}
-
 function onKeyDown(e) {
     if (e.code === 'Space') {
         if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
@@ -454,35 +435,12 @@ function onKeyDown(e) {
     const mod = e.ctrlKey || e.metaKey, scene = getCurrentScene();
     if (!scene) return;
 
-    // Music Keys (Live in menu OR recording)
-    const isMusicianActive = state.ui.selectedActorId === 'musician';
-    const isMusicMenuOpen = state.ui.activePanel === 'music';
-    if (!mod && (isMusicMenuOpen || (isMusicianActive && (state.ui.isRecording || !state.ui.isPlaying)))) {
-        const val = e.key === '0' ? 0 : parseInt(e.key);
-        if (!isNaN(val)) {
-            if (val >= 1 && val <= 7) { 
-                const noteIndex = val - 1;
-                const octave = scene.musician.octaveOffset || 0;
-                playNote(scene, noteIndex, scene.musician.chordMode, octave); 
-                if (state.ui.isRecording && isMusicianActive) {
-                    const rec = scene.musician.recordings[scene.musician.recordings.length - 1];
-                    const frame = state.ui.currentFrame;
-                    if (!rec.frames[frame]) rec.frames[frame] = [];
-                    rec.frames[frame].push({ note: noteIndex, chord: scene.musician.chordMode, octave: octave });
-                }
-                return; 
-            }
-            if (val === 8) { scene.musician.octaveOffset = Math.max(-2, (scene.musician.octaveOffset || 0) - 1); return; }
-            if (val === 9) { scene.musician.octaveOffset = Math.min(2, (scene.musician.octaveOffset || 0) + 1); return; }
-            if (val === 0) { scene.musician.chordMode = !scene.musician.chordMode; return; }
-        }
-    }
-
-    if (state.ui.activePanel === 'editor') { if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; } if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; } }
+    if (state.ui.activePanel === 'editor') {
+ if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; } if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; } }
     const ki = "1234567890qwertyuiopasdfghjklzxcvbnm".indexOf(e.key.toLowerCase());
     if (ki !== -1 && !mod) {
         if (state.ui.activePanel === 'editor') { const t = state.ui.editingTarget; if (t && t.costumes[ki]) { state.ui.editingCostumeIndex = ki; state.ui.undoStack = []; state.ui.redoStack = []; updateUndoRedoButtons(); renderCostumeList(); loadCostumeToEditor(t.costumes[ki]); } return; }
-        let t = (state.ui.selectedActorId === 'backdrop' ? scene.backdrop : (state.ui.selectedActorId === 'musician' ? scene.musician : scene.actors.find(a => a.id === state.ui.selectedActorId)));
+        let t = (state.ui.selectedActorId === 'backdrop' ? scene.backdrop : scene.actors.find(a => a.id === state.ui.selectedActorId));
         if (t && t.costumes && t.costumes[ki]) {
             const rec = t.recordings[t.recordings.length - 1];
             const has = rec && (Array.isArray(rec.frames) ? rec.frames.length > 0 : Object.keys(rec.frames).length > 0);
@@ -492,7 +450,7 @@ function onKeyDown(e) {
                     const frame = state.ui.currentFrame; 
                     if (t.id === 'backdrop') { 
                         rec.frames[frame] = { x: 0, y: 0, costumeIndex: ki }; 
-                    } else if (t.id !== 'musician') { 
+                    } else { 
                         rec.frames[frame] = { x: t.x, y: t.y, costumeIndex: ki }; 
                     } 
                 } 
@@ -503,7 +461,7 @@ function onKeyDown(e) {
 
 function setupPalette() { colorPalette.innerHTML = ''; colors.forEach(c => { const s = document.createElement('div'); s.className = 'color-swatch' + (c === 'transparent' ? ' transparent' : ''); if (c !== 'transparent') s.style.backgroundColor = c; if (c === state.ui.currentColor) s.classList.add('active'); s.onclick = () => { state.ui.currentColor = c; document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('active')); s.classList.add('active'); }; colorPalette.appendChild(s); }); }
 function createInitialState() { addScene(); }
-function createEmptyScene(name) { return { id: 'scene_' + Date.now(), name, songId: null, backdrop: { id: 'backdrop', name: 'Backdrop', costumes: [createEmptyCostume(state.project.width, state.project.height, true)], currentCostume: 0, recordings: [] }, musician: { id: 'musician', name: 'Piano', instrument: 'piano', key: 'C', scale: 'major', octaveOffset: 0, chordMode: false, recordings: [] }, actors: [] }; }
+function createEmptyScene(name) { return { id: 'scene_' + Date.now(), name, songId: null, backdrop: { id: 'backdrop', name: 'Backdrop', costumes: [createEmptyCostume(state.project.width, state.project.height, true)], currentCostume: 0, recordings: [] }, actors: [] }; }
 function createEmptyCostume(w, h, isBD = false) { const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d'); if (isBD) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, w, h); } return { canvas: c, name: 'Costume' }; }
 
 let isDrawing = false, startX, startY, snapshot, preStrokeState = null, brushPixels = [];
@@ -537,9 +495,6 @@ function bindEvents() {
     document.getElementById('costume-copy-btn').onclick = copyCostume;
     document.getElementById('costume-paste-btn').onclick = pasteCostume;
     document.getElementById('show-title-card-checkbox').onchange = (e) => { state.project.showTitleCard = e.target.checked; saveProject(); };
-    document.getElementById('music-instrument-select').onchange = (e) => { const mu = getCurrentScene().musician; mu.instrument = e.target.value; mu.name = instruments[mu.instrument].name; renderActorList(); saveProject(); };
-    document.getElementById('music-key-select').onchange = (e) => { getCurrentScene().musician.key = e.target.value; saveProject(); };
-    document.getElementById('music-scale-select').onchange = (e) => { getCurrentScene().musician.scale = e.target.value; saveProject(); };
     const pencilSlider = document.getElementById('pencil-size');
     pencilSlider.onmousedown = () => { updateBrushPreview(); document.getElementById('brush-size-overlay').classList.remove('hidden'); };
     window.addEventListener('mouseup', () => { document.getElementById('brush-size-overlay').classList.add('hidden'); });
@@ -676,6 +631,7 @@ function togglePlayback(asTheater, startFromBeginning) {
         state.ui.isPlaying = true; state.ui.selectedActorId = null;
         document.getElementById('play-btn').textContent = '⏹️'; document.getElementById('play-group').classList.add('is-playing');
         state.ui.currentFrame = 0;
+        state.ui.songFrameOffset = 0;
         state.ui.lastFrameTime = performance.now();
         state.ui.timeAccumulator = 0;
         if (!state.ui.isTitleCardActive) playAllAudio();
