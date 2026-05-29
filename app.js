@@ -68,7 +68,7 @@ let micStream = null, audioContext = null, musicRecorder = null, musicChunks = [
 
 async function init() {
     if (localStorage.getItem('drag-n-film-version') !== '3.0-music') {
-        localStorage.clear();
+        localStorage.removeItem('drag-n-film-project');
         localStorage.setItem('drag-n-film-version', '3.0-music');
     }
     setupStage(); setupPalette(); bindEvents();
@@ -857,7 +857,29 @@ function resizeCurrentCostume(w, h) { if (editorCanvas.width === w && editorCanv
 function floodFill(sx, sy, color) { const ctx = editorCanvas.getContext('2d'), img = ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height), d = img.data, w = img.width, h = img.height, idx = (sy * w + sx) * 4, sR = d[idx], sG = d[idx+1], sB = d[idx+2], sA = d[idx+3], fill = color === 'transparent' ? { r:0, g:0, b:0, a:0 } : hexToRgb(color); if (color !== 'transparent') fill.a = 255; if (sR === fill.r && sG === fill.g && sB === fill.b && sA === fill.a) return; const q = [[sx, sy]]; while (q.length) { const [x, y] = q.pop(), i = (y * w + x) * 4; if (x < 0 || x >= w || y < 0 || y >= h || d[i] !== sR || d[i+1] !== sG || d[i+2] !== sB || d[i+3] !== sA) continue; d[i] = fill.r; d[i+1] = fill.g; d[i+2] = fill.b; d[i+3] = fill.a; q.push([x+1, y], [x-1, y], [x, y+1], [x, y-1]); } ctx.putImageData(img, 0, 0); }
 function hexToRgb(hex) { const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex); return r ? { r: parseInt(r[1], 16), g: parseInt(r[2], 16), b: parseInt(r[3], 16) } : { r: 0, g: 0, b: 0 }; }
 
-async function saveProject() { if (state.ui.isResetting) return; const scenes = await Promise.all(state.project.scenes.map(async s => ({ name: s.name, backdrop: await serializeTarget(s.backdrop), musician: { ...s.musician, recordings: await Promise.all(s.musician.recordings.map(serializeRecording)) }, actors: await Promise.all(s.actors.map(serializeTarget)) }))); localStorage.setItem('drag-n-film-project', JSON.stringify({ width: state.project.width, height: state.project.height, currentSceneIndex: state.project.currentSceneIndex, movieTitle: state.project.movieTitle, creatorName: state.project.creatorName, fontStyle: state.project.fontStyle, titleBgColor: state.project.titleBgColor, titleTextColor: state.project.titleTextColor, showTitleCard: state.project.showTitleCard, scenes })); }
+async function saveProject() { 
+    if (state.ui.isResetting) return; 
+    const scenes = await Promise.all(state.project.scenes.map(async s => ({ 
+        name: s.name, 
+        songId: s.songId,
+        backdrop: await serializeTarget(s.backdrop), 
+        musician: { ...s.musician, recordings: await Promise.all(s.musician.recordings.map(serializeRecording)) }, 
+        actors: await Promise.all(s.actors.map(serializeTarget)) 
+    }))); 
+    localStorage.setItem('drag-n-film-project', JSON.stringify({ 
+        width: state.project.width, 
+        height: state.project.height, 
+        currentSceneIndex: state.project.currentSceneIndex, 
+        movieTitle: state.project.movieTitle, 
+        creatorName: state.project.creatorName, 
+        fontStyle: state.project.fontStyle, 
+        titleBgColor: state.project.titleBgColor, 
+        titleTextColor: state.project.titleTextColor, 
+        showTitleCard: state.project.showTitleCard, 
+        songs: state.project.songs,
+        scenes 
+    })); 
+}
 async function serializeRecording(r) { 
     let audioData = null; 
     if (r.audio) { 
@@ -871,7 +893,28 @@ async function serializeRecording(r) {
 }
 async function serializeTarget(t) { return { id: t.id, name: t.name, currentCostume: t.currentCostume, x: t.x, y: t.y, costumes: t.costumes.map(c => ({ name: c.name, data: c.canvas.toDataURL() })), recordings: await Promise.all(t.recordings.map(serializeRecording)) }; }
 function blobToDataURL(blob) { return new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(blob); }); }
-async function loadProject() { const data = localStorage.getItem('drag-n-film-project'); if (!data) return; const p = JSON.parse(data); state.project.width = p.width; state.project.height = p.height; state.project.currentSceneIndex = p.currentSceneIndex || 0; state.project.movieTitle = p.movieTitle || "My Movie"; state.project.creatorName = p.creatorName || "Me"; state.project.fontStyle = p.fontStyle || "Arial"; state.project.titleBgColor = p.titleBgColor || "#ffffff"; state.project.titleTextColor = p.titleTextColor || "#000000"; state.project.showTitleCard = p.showTitleCard !== undefined ? p.showTitleCard : true; state.project.scenes = await Promise.all(p.scenes.map(async s => ({ name: s.name, backdrop: await deserializeTarget(s.backdrop), musician: await deserializeMusician(s.musician), actors: await Promise.all(s.actors.map(deserializeTarget)) }))); }
+async function loadProject() { 
+    const data = localStorage.getItem('drag-n-film-project'); 
+    if (!data) return; 
+    const p = JSON.parse(data); 
+    state.project.width = p.width; 
+    state.project.height = p.height; 
+    state.project.currentSceneIndex = p.currentSceneIndex || 0; 
+    state.project.movieTitle = p.movieTitle || "My Movie"; 
+    state.project.creatorName = p.creatorName || "Me"; 
+    state.project.fontStyle = p.fontStyle || "Arial"; 
+    state.project.titleBgColor = p.titleBgColor || "#ffffff"; 
+    state.project.titleTextColor = p.titleTextColor || "#000000"; 
+    state.project.showTitleCard = p.showTitleCard !== undefined ? p.showTitleCard : true; 
+    state.project.songs = p.songs || [];
+    state.project.scenes = await Promise.all(p.scenes.map(async s => ({ 
+        name: s.name, 
+        songId: s.songId || null,
+        backdrop: await deserializeTarget(s.backdrop), 
+        musician: await deserializeMusician(s.musician), 
+        actors: await Promise.all(s.actors.map(deserializeTarget)) 
+    }))); 
+}
 async function deserializeMusician(m) { 
     if (!m) return { id: 'musician', name: 'Piano', instrument: 'piano', key: 'C', scale: 'major', octaveOffset: 0, chordMode: false, recordings: [] };
     const res = { ...m }; 
@@ -906,18 +949,49 @@ function importDragFile(e) {
     const f = e.target.files[0]; if (!f) return; const r = new FileReader();
     r.onload = async (ev) => {
         try {
-            const p = JSON.parse(ev.target.result); state.project.width = p.width; state.project.height = p.height; state.project.currentSceneIndex = 0;
-            state.project.movieTitle = p.movieTitle || "My Movie"; state.project.creatorName = p.creatorName || "Me"; state.project.fontStyle = p.fontStyle || "Arial";
-            state.project.titleBgColor = p.titleBgColor || "#ffffff"; state.project.titleTextColor = p.titleTextColor || "#000000"; state.project.showTitleCard = p.showTitleCard !== undefined ? p.showTitleCard : true;
-            state.project.scenes = await Promise.all(p.scenes.map(async s => ({ name: s.name, backdrop: await deserializeTarget(s.backdrop), musician: await deserializeMusician(s.musician), actors: await Promise.all(s.actors.map(deserializeTarget)) })));
+            const p = JSON.parse(ev.target.result); 
+            state.project.width = p.width; 
+            state.project.height = p.height; 
+            state.project.currentSceneIndex = 0;
+            state.project.movieTitle = p.movieTitle || "My Movie"; 
+            state.project.creatorName = p.creatorName || "Me"; 
+            state.project.fontStyle = p.fontStyle || "Arial";
+            state.project.titleBgColor = p.titleBgColor || "#ffffff"; 
+            state.project.titleTextColor = p.titleTextColor || "#000000"; 
+            state.project.showTitleCard = p.showTitleCard !== undefined ? p.showTitleCard : true;
+            state.project.songs = p.songs || [];
+            state.project.scenes = await Promise.all(p.scenes.map(async s => ({ 
+                name: s.name, 
+                songId: s.songId || null,
+                backdrop: await deserializeTarget(s.backdrop), 
+                musician: await deserializeMusician(s.musician), 
+                actors: await Promise.all(s.actors.map(deserializeTarget)) 
+            })));
             updatePlayMovieButton(); updateMovieExportButtons(); syncMovieInputs(); renderSceneList(); renderActorList(); saveProject(); togglePanel(null);
         } catch (e) { alert("Invalid .drag file"); }
     }; r.readAsText(f);
 }
 
 async function exportDragFile() {
-    const scenes = await Promise.all(state.project.scenes.map(async s => ({ name: s.name, backdrop: await serializeTarget(s.backdrop), musician: { ...s.musician, recordings: await Promise.all(s.musician.recordings.map(serializeRecording)) }, actors: await Promise.all(s.actors.map(serializeTarget)) })));
-    const blob = new Blob([JSON.stringify({ width: state.project.width, height: state.project.height, scenes, movieTitle: state.project.movieTitle, creatorName: state.project.creatorName, fontStyle: state.project.fontStyle, titleBgColor: state.project.titleBgColor, titleTextColor: state.project.titleTextColor, showTitleCard: state.project.showTitleCard })], { type: 'application/json' });
+    const scenes = await Promise.all(state.project.scenes.map(async s => ({ 
+        name: s.name, 
+        songId: s.songId,
+        backdrop: await serializeTarget(s.backdrop), 
+        musician: { ...s.musician, recordings: await Promise.all(s.musician.recordings.map(serializeRecording)) }, 
+        actors: await Promise.all(s.actors.map(serializeTarget)) 
+    })));
+    const blob = new Blob([JSON.stringify({ 
+        width: state.project.width, 
+        height: state.project.height, 
+        scenes, 
+        movieTitle: state.project.movieTitle, 
+        creatorName: state.project.creatorName, 
+        fontStyle: state.project.fontStyle, 
+        titleBgColor: state.project.titleBgColor, 
+        titleTextColor: state.project.titleTextColor, 
+        showTitleCard: state.project.showTitleCard,
+        songs: state.project.songs
+    })], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'project.drag'; a.click();
 }
 
