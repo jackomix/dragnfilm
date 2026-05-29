@@ -23,6 +23,7 @@ const state = {
         movieStartSceneIndex: 0,
         currentFrame: 0,
         lastFrameTime: 0,
+        timeAccumulator: 0,
         selectedActorId: null, 
         micEnabled: false, pencilSize: 5,
         stageMargin: 500, 
@@ -143,17 +144,64 @@ function renderLoop() {
     const isPlayingOrRecording = state.ui.isPlaying || state.ui.isRecording;
 
     if (isPlayingOrRecording) {
-        if (now - state.ui.lastFrameTime >= FRAME_DURATION) {
+        let deltaTime = now - state.ui.lastFrameTime;
+        if (deltaTime > 500) deltaTime = 500;
+        state.ui.timeAccumulator += deltaTime;
+        state.ui.lastFrameTime = now;
+
+        const steps = Math.floor(state.ui.timeAccumulator / FRAME_DURATION);
+        let currentStep = 0;
+
+        const startPositions = new Map();
+        if (state.ui.isRecording && steps > 0) {
+            scene.actors.forEach(actor => {
+                const rec = actor.recordings[actor.recordings.length - 1];
+                if (rec && rec.frames) {
+                    const prev = rec.frames[state.ui.currentFrame];
+                    if (prev) startPositions.set(actor.id, { x: prev.x, y: prev.y });
+                }
+            });
+        }
+
+        while (state.ui.timeAccumulator >= FRAME_DURATION) {
             state.ui.currentFrame++;
-            state.ui.lastFrameTime = now;
+            state.ui.timeAccumulator -= FRAME_DURATION;
+            currentStep++;
             
-            // Trigger Music Events (Moved inside the throttle)
             if (!state.ui.isTitleCardActive) {
                 triggerMusicEvents(scene, state.ui.currentFrame);
+            }
+
+            if (state.ui.isRecording) {
+                const t = currentStep / (steps || 1);
+                scene.actors.forEach(actor => {
+                    const isSelected = state.ui.selectedActorId === actor.id;
+                    const isHoverRec = state.ui.dragMode === 'hover' && isSelected;
+                    const isDragRec = draggedActor && draggedActor.id === actor.id;
+                    if (isHoverRec || isDragRec) {
+                        const rec = actor.recordings[actor.recordings.length - 1];
+                        const start = startPositions.get(actor.id);
+                        if (start) {
+                            rec.frames[state.ui.currentFrame] = {
+                                x: start.x + (actor.x - start.x) * t,
+                                y: start.y + (actor.y - start.y) * t,
+                                costumeIndex: actor.currentCostume
+                            };
+                        } else {
+                            rec.frames[state.ui.currentFrame] = { x: actor.x, y: actor.y, costumeIndex: actor.currentCostume };
+                        }
+                    }
+                });
+                
+                if (state.ui.selectedActorId === 'backdrop') {
+                    const rec = scene.backdrop.recordings[scene.backdrop.recordings.length - 1];
+                    rec.frames[state.ui.currentFrame] = { x: 0, y: 0, costumeIndex: scene.backdrop.currentCostume };
+                }
             }
         }
     } else {
         state.ui.lastFrameTime = now;
+        state.ui.timeAccumulator = 0;
     }
 
     const titleCardDurationFrames = state.project.showTitleCard ? 120 : 0;
@@ -222,9 +270,6 @@ function renderLoop() {
         const actor = scene.actors[i];
         const { x, y, ci } = getActorDisplayState(actor, state.ui.currentFrame);
         const isSelected = state.ui.selectedActorId === actor.id;
-        const isHoverRec = state.ui.dragMode === 'hover' && state.ui.isRecording && isSelected;
-        const isDragRec = state.ui.isRecording && draggedActor && draggedActor.id === actor.id;
-        if (isHoverRec || isDragRec) { const rec = actor.recordings[actor.recordings.length - 1]; rec.frames[state.ui.currentFrame] = { x, y, costumeIndex: ci }; }
         const costume = actor.costumes[ci];
         if (costume) {
             const dx = margin + x - costume.canvas.width / 2, dy = margin + y - costume.canvas.height / 2;
@@ -590,6 +635,7 @@ async function startRecording(t) {
     t.recordings.push(newRec); 
     state.ui.currentFrame = 0;
     state.ui.lastFrameTime = performance.now();
+    state.ui.timeAccumulator = 0;
     if (!isMusician) newRec.frames[0] = { x: t.x, y: t.y, costumeIndex: t.currentCostume }; 
     playAllAudio();
     if (state.ui.micEnabled && micStream) { mediaRecorder = new MediaRecorder(micStream); audioChunks = []; mediaRecorder.ondataavailable = e => audioChunks.push(e.data); mediaRecorder.onstop = () => { const blob = new Blob(audioChunks, { type: 'audio/webm' }); t.recordings[t.recordings.length - 1].audio = URL.createObjectURL(blob); renderActorList(); }; mediaRecorder.start(); }
@@ -616,6 +662,7 @@ function togglePlayback(asTheater, startFromBeginning) {
         document.getElementById('play-btn').textContent = '⏹️'; document.getElementById('play-group').classList.add('is-playing');
         state.ui.currentFrame = 0;
         state.ui.lastFrameTime = performance.now();
+        state.ui.timeAccumulator = 0;
         if (!state.ui.isTitleCardActive) playAllAudio();
         renderActorList(); renderSceneList();
     }
