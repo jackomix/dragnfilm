@@ -56,7 +56,7 @@ const editorCanvas = document.getElementById('editor-canvas');
 const listPanel = document.getElementById('list-panel');
 const filePanel = document.getElementById('file-panel');
 const moviePanel = document.getElementById('movie-panel');
-const musicPanel = document.getElementById('instrument-panel');
+const musicPanel = document.getElementById('soundtrack-panel');
 const editorPanel = document.getElementById('editor-panel');
 const actorList = document.getElementById('actor-list');
 const sceneList = document.getElementById('scene-list');
@@ -499,7 +499,9 @@ let isDrawing = false, startX, startY, snapshot, preStrokeState = null, brushPix
 function bindEvents() {
     document.getElementById('file-btn').onclick = () => togglePanel('file');
     document.getElementById('scene-btn').onclick = () => togglePanel('movie');
+    document.getElementById('instruments-btn').onclick = () => togglePanel('soundtrack');
     document.getElementById('add-scene-btn').onclick = addScene;
+    document.getElementById('add-song-btn').onclick = addSong;
     document.getElementById('new-btn').onclick = newProject;
     document.getElementById('export-scene-video-btn').onclick = () => exportMovie(false, 'video');
     document.getElementById('export-scene-gif-btn').onclick = () => exportMovie(false, 'gif');
@@ -736,13 +738,10 @@ function togglePanel(panel) { state.ui.activePanel = (state.ui.activePanel === p
 function updatePanelVisibility() { 
     listPanel.classList.toggle('hidden', state.ui.activePanel !== 'list'); editorPanel.classList.toggle('hidden', state.ui.activePanel !== 'editor'); 
     filePanel.classList.toggle('hidden', state.ui.activePanel !== 'file'); moviePanel.classList.toggle('hidden', state.ui.activePanel !== 'movie'); 
-    musicPanel.classList.toggle('hidden', state.ui.activePanel !== 'music');
+    musicPanel.classList.toggle('hidden', state.ui.activePanel !== 'soundtrack');
 
-    if (state.ui.activePanel === 'music') {
-        const mu = getCurrentScene().musician;
-        document.getElementById('music-instrument-select').value = mu.instrument;
-        document.getElementById('music-key-select').value = mu.key;
-        document.getElementById('music-scale-select').value = mu.scale;
+    if (state.ui.activePanel === 'soundtrack') {
+        renderSoundtrackPanel();
     }
 
     if (state.ui.activePanel === 'editor' && state.ui.editingTarget) {
@@ -767,6 +766,125 @@ function renderSceneList() {
         if (state.project.scenes.length > 1) { const del = document.createElement('button'); del.textContent = '🗑'; del.onclick = (e) => { e.stopPropagation(); if (confirm(`Delete scene "${s.name}"?`)) { state.project.scenes.splice(i, 1); if (state.project.currentSceneIndex >= state.project.scenes.length) state.project.currentSceneIndex = state.project.scenes.length - 1; updatePlayMovieButton(); updateMovieExportButtons(); renderSceneList(); renderActorList(); saveProject(); } }; acts.appendChild(del); }
         div.appendChild(acts); div.onclick = () => { if (state.project.currentSceneIndex !== i) { stopAllPlayback(); state.project.currentSceneIndex = i; renderSceneList(); renderActorList(); state.ui.selectedActorId = null; } }; sceneList.appendChild(div);
     });
+}
+
+function renderSoundtrackPanel() {
+    const sceneMusicList = document.getElementById('scene-music-list');
+    const songLibraryList = document.getElementById('song-library-list');
+    
+    sceneMusicList.innerHTML = '';
+    state.project.scenes.forEach((s, i) => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.alignItems = 'center';
+        div.style.padding = '5px';
+        
+        const name = document.createElement('span');
+        name.textContent = s.name;
+        div.appendChild(name);
+        
+        const select = document.createElement('select');
+        select.style.width = '120px';
+        const noneOpt = document.createElement('option');
+        noneOpt.value = '';
+        noneOpt.textContent = 'None';
+        select.appendChild(noneOpt);
+        
+        state.project.songs.forEach(song => {
+            const opt = document.createElement('option');
+            opt.value = song.id;
+            opt.textContent = song.name;
+            if (s.songId === song.id) opt.selected = true;
+            select.appendChild(opt);
+        });
+        
+        select.onchange = (e) => {
+            s.songId = e.target.value || null;
+            saveProject();
+        };
+        div.appendChild(select);
+        sceneMusicList.appendChild(div);
+    });
+    
+    songLibraryList.innerHTML = '';
+    state.project.songs.forEach((song, i) => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.alignItems = 'center';
+        div.style.padding = '5px';
+        
+        const name = document.createElement('span');
+        name.textContent = song.name;
+        name.className = 'clickable-name';
+        name.onclick = () => {
+            const newName = prompt("Rename song:", song.name);
+            if (newName) {
+                song.name = newName;
+                renderSoundtrackPanel();
+                saveProject();
+            }
+        };
+        div.appendChild(name);
+        
+        const acts = document.createElement('div');
+        acts.style.display = 'flex';
+        acts.style.gap = '5px';
+        
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '✎';
+        editBtn.onclick = () => openSongStudio(song);
+        acts.appendChild(editBtn);
+        
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑';
+        delBtn.onclick = () => {
+            if (confirm(`Delete song "${song.name}"?`)) {
+                deleteSong(song.id);
+            }
+        };
+        acts.appendChild(delBtn);
+        
+        div.appendChild(acts);
+        songLibraryList.appendChild(div);
+    });
+}
+
+function addSong() {
+    const song = {
+        id: 'song_' + Date.now(),
+        name: 'Song ' + (state.project.songs.length + 1),
+        bpm: 120,
+        key: 'C',
+        scale: 'major',
+        bars: 4,
+        tracks: {
+            lead: { instrument: 'piano', notes: {} },
+            chords: { instrument: 'synth', notes: {} },
+            bass: { instrument: 'synth', notes: {} },
+            drums: { instrument: 'drum', notes: {} }
+        }
+    };
+    state.project.songs.push(song);
+    renderSoundtrackPanel();
+    saveProject();
+}
+
+function deleteSong(songId) {
+    state.project.songs = state.project.songs.filter(s => s.id !== songId);
+    state.project.scenes.forEach(s => {
+        if (s.songId === songId) s.songId = null;
+    });
+    renderSoundtrackPanel();
+    saveProject();
+}
+
+function openSongStudio(song) {
+    // To be implemented in Task 3
+    alert("Song Studio for " + song.name + " coming in Task 3!");
 }
 function updatePlayMovieButton() { document.getElementById('play-group').classList.add('can-theater'); }
 function updateMovieExportButtons() { const el = document.getElementById('movie-export-options'); if (el) el.classList.remove('hidden'); }

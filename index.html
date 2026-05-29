@@ -70,55 +70,17 @@
                 </div>
             </div>
 
-            <div id="instruments-panel" class="hidden panel">
-                <div class="panel-header">Music</div>
+            <div id="soundtrack-panel" class="hidden panel">
+                <div class="panel-header">Soundtrack</div>
                 <div class="panel-content">
                     <div class="file-section">
-                        <h3>Instruments</h3>
-                        <div id="instruments-list" class="list-container"></div>
-                        <button id="add-instrument-btn" class="plus-btn">+</button>
-                    </div>
-                </div>
-            </div>
-
-            <div id="instrument-panel" class="hidden panel">
-                <div class="panel-header">Instrument Settings</div>
-                <div class="panel-content">
-                    <div class="file-section">
-                        <h3>Type</h3>
-                        <select id="music-instrument-select" style="width: 100%;">
-                            <option value="piano">🎹 Piano</option>
-                            <option value="synth">🔊 Synth</option>
-                            <option value="flute">🌬️ Flute</option>
-                            <option value="bell">🔔 Bell</option>
-                            <option value="drum">🥁 Drum</option>
-                        </select>
+                        <h3>Scene Music</h3>
+                        <div id="scene-music-list" class="list-container"></div>
                     </div>
                     <div class="file-section">
-                        <h3>Composition</h3>
-                        <div style="display: flex; gap: 10px;">
-                            <div style="flex: 1;">
-                                <div style="font-size: 11px;">Key</div>
-                                <select id="music-key-select" style="width: 100%;">
-                                    <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
-                                    <option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option>
-                                    <option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
-                                </select>
-                            </div>
-                            <div style="flex: 1;">
-                                <div style="font-size: 11px;">Scale</div>
-                                <select id="music-scale-select" style="width: 100%;">
-                                    <option value="major">Major</option>
-                                    <option value="minor">Minor</option>
-                                    <option value="pentatonic">Pentatonic</option>
-                                    <option value="blues">Blues</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="file-section" style="padding: 10px; border: 1px solid #000; font-size: 11px; line-height: 1.2;">
-                        <strong>Keys</strong><br>
-                        1-7: Notes | 8/9: Octave Down/Up | 0: Chords
+                        <h3>Library</h3>
+                        <div id="song-library-list" class="list-container"></div>
+                        <button id="add-song-btn" class="plus-btn">+</button>
                     </div>
                 </div>
             </div>
