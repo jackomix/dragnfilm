@@ -9,7 +9,8 @@ const state = {
         fontStyle: "Arial",
         titleBgColor: "#ffffff",
         titleTextColor: "#000000",
-        showTitleCard: true
+        showTitleCard: true,
+        songs: []
     },
     ui: {
         activePanel: null, editingTarget: null, editingCostumeIndex: 0, 
@@ -55,7 +56,7 @@ const editorCanvas = document.getElementById('editor-canvas');
 const listPanel = document.getElementById('list-panel');
 const filePanel = document.getElementById('file-panel');
 const moviePanel = document.getElementById('movie-panel');
-const musicPanel = document.getElementById('music-panel');
+const musicPanel = document.getElementById('instrument-panel');
 const editorPanel = document.getElementById('editor-panel');
 const actorList = document.getElementById('actor-list');
 const sceneList = document.getElementById('scene-list');
@@ -66,9 +67,9 @@ const progressContainer = document.getElementById('progress-container');
 let micStream = null, audioContext = null, musicRecorder = null, musicChunks = [], musicDest = null, mediaRecorder = null, audioChunks = [], activeAudioPlayers = [];
 
 async function init() {
-    if (localStorage.getItem('drag-n-film-version') !== '2.0-frames') {
+    if (localStorage.getItem('drag-n-film-version') !== '3.0-music') {
         localStorage.clear();
-        localStorage.setItem('drag-n-film-version', '2.0-frames');
+        localStorage.setItem('drag-n-film-version', '3.0-music');
     }
     setupStage(); setupPalette(); bindEvents();
     if (sessionStorage.getItem('drag-n-film-reset') === 'true') { sessionStorage.removeItem('drag-n-film-reset'); localStorage.removeItem('drag-n-film-project'); }
@@ -490,7 +491,7 @@ function onKeyDown(e) {
 
 function setupPalette() { colorPalette.innerHTML = ''; colors.forEach(c => { const s = document.createElement('div'); s.className = 'color-swatch' + (c === 'transparent' ? ' transparent' : ''); if (c !== 'transparent') s.style.backgroundColor = c; if (c === state.ui.currentColor) s.classList.add('active'); s.onclick = () => { state.ui.currentColor = c; document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('active')); s.classList.add('active'); }; colorPalette.appendChild(s); }); }
 function createInitialState() { addScene(); }
-function createEmptyScene(name) { return { id: 'scene_' + Date.now(), name, backdrop: { id: 'backdrop', name: 'Backdrop', costumes: [createEmptyCostume(state.project.width, state.project.height, true)], currentCostume: 0, recordings: [] }, musician: { id: 'musician', name: 'Piano', instrument: 'piano', key: 'C', scale: 'major', octaveOffset: 0, chordMode: false, recordings: [] }, actors: [] }; }
+function createEmptyScene(name) { return { id: 'scene_' + Date.now(), name, songId: null, backdrop: { id: 'backdrop', name: 'Backdrop', costumes: [createEmptyCostume(state.project.width, state.project.height, true)], currentCostume: 0, recordings: [] }, musician: { id: 'musician', name: 'Piano', instrument: 'piano', key: 'C', scale: 'major', octaveOffset: 0, chordMode: false, recordings: [] }, actors: [] }; }
 function createEmptyCostume(w, h, isBD = false) { const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d'); if (isBD) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, w, h); } return { canvas: c, name: 'Costume' }; }
 
 let isDrawing = false, startX, startY, snapshot, preStrokeState = null, brushPixels = [];
