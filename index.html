@@ -188,6 +188,24 @@
             </div>
         </div>
     </div>
+
+    <div id="song-studio-overlay" class="hidden overlay">
+        <div class="studio-container">
+            <div class="studio-header">
+                <input type="text" id="studio-song-name" style="font-size: 20px; font-weight: bold; background: transparent; border: none; color: white;">
+                <div class="studio-controls">
+                    <span>BPM: <input type="number" id="studio-bpm" value="120" style="width: 50px;"></span>
+                    <span>Key: <select id="studio-key"></select></span>
+                    <span>Scale: <select id="studio-scale"></select></span>
+                    <span>Bars: <input type="number" id="studio-bars" value="4" style="width: 40px;"></span>
+                    <button id="studio-close-btn">Close</button>
+                </div>
+            </div>
+            <div class="studio-grid-wrap">
+                <canvas id="studio-grid-canvas"></canvas>
+            </div>
+        </div>
+    </div>
     <script src="app.js"></script>
 </body>
 </html>
