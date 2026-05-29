@@ -665,7 +665,6 @@ function triggerMusicEvents(scene, frameIndex, ctx = null, dest = null) {
 
 function playAllAudio() {
     if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    state.ui.lastAudioTime = 0; // Reset procedural audio sync
     const scene = getCurrentScene(); 
     [scene.backdrop, ...scene.actors].forEach(t => { 
         const rec = t.recordings[t.recordings.length - 1]; 
