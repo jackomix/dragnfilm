@@ -20,9 +20,9 @@ const state = {
         isTitleCardActive: false,
         lineDashOffset: 0,
         lastBoilUpdate: 0,
-        lastAudioTime: 0,
         movieStartSceneIndex: 0,
-        playbackStartTime: 0, 
+        currentFrame: 0,
+        lastFrameTime: 0,
         selectedActorId: null, 
         micEnabled: false, pencilSize: 5,
         stageMargin: 500, 
@@ -38,6 +38,9 @@ const colors = [
     '#ffff80', '#004040', '#00ff80', '#0080ff', '#80ffff', '#004080', '#8080ff', '#8000ff', '#ff0080', 
     '#804000', '#ff8040'
 ];
+
+const FPS = 60;
+const FRAME_DURATION = 1000 / FPS;
 
 const instruments = {
     piano: { name: "Piano", icon: "🎹", type: "triangle" },
