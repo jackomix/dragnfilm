@@ -172,6 +172,17 @@ function renderLoop() {
             
             if (!state.ui.isTitleCardActive) {
                 triggerMusicEvents(scene, state.ui.currentFrame);
+                const song = scene.songId ? state.project.songs.find(s => s.id === scene.songId) : null;
+                if (song) {
+                    const framesPerSub = (60 * FPS) / (song.bpm * 2); // 8th notes
+                    const currentSub = Math.floor(state.ui.currentFrame / framesPerSub);
+                    const lastSub = Math.floor((state.ui.currentFrame - 1) / framesPerSub);
+                    
+                    if (currentSub !== lastSub) {
+                        const loopSub = currentSub % (song.bars * 8);
+                        ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
+                    }
+                }
             }
 
             if (state.ui.isRecording) {
@@ -712,6 +723,86 @@ function triggerMusicEvents(scene, frameIndex, ctx = null, dest = null) {
             playNote(scene, f.note, f.chord, f.octave || 0, ctx, dest);
         });
     }
+}
+
+function getFrequencyForDegree(degree, key, scale, octaveOffset) {
+    const rootHz = { "C": 261.63, "C#": 277.18, "D": 293.66, "D#": 311.13, "E": 329.63, "F": 349.23, "F#": 369.99, "G": 392.00, "G#": 415.30, "A": 440.00, "A#": 466.16, "B": 493.88 };
+    const intervals = scales[scale] || [0, 2, 4, 5, 7, 9, 11];
+    const octave = Math.floor(degree / 7) + octaveOffset;
+    const interval = intervals[degree % 7];
+    return rootHz[key] * Math.pow(2, octave + interval / 12);
+}
+
+function triggerSongNote(song, trackName, subdivisionIndex, ctx = null, dest = null) {
+    const degree = song.tracks[trackName].notes[subdivisionIndex];
+    if (degree === undefined) return;
+    
+    if (trackName === 'drums') {
+        playDrum(degree, ctx, dest);
+    } else {
+        const octaveOffset = trackName === 'bass' ? -2 : (trackName === 'lead' ? 1 : 0);
+        const freq = getFrequencyForDegree(degree, song.key, song.scale, octaveOffset);
+        playSynth(freq, song.tracks[trackName].instrument, trackName === 'chords', ctx, dest);
+    }
+}
+
+function playSynth(freq, instrumentName, isChord, ctx = null, dest = null) {
+    const activeCtx = ctx || audioContext || (audioContext = new (window.AudioContext || window.webkitAudioContext)());
+    if (activeCtx.state === 'suspended') activeCtx.resume();
+    
+    const inst = instruments[instrumentName] || instruments.synth;
+    const freqs = isChord ? [freq, freq * Math.pow(2, 4/12), freq * Math.pow(2, 7/12)] : [freq];
+    
+    freqs.forEach(f => {
+        const osc = activeCtx.createOscillator();
+        const gain = activeCtx.createGain();
+        osc.frequency.value = f;
+        osc.type = inst.type || 'sawtooth';
+        
+        osc.connect(gain);
+        const target = dest || activeCtx.destination;
+        gain.connect(target);
+        if (!dest && musicDest) gain.connect(musicDest);
+        
+        const now = activeCtx.currentTime;
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        osc.start(); osc.stop(now + 0.5);
+    });
+}
+
+function playDrum(degree, ctx = null, dest = null) {
+    const activeCtx = ctx || audioContext || (audioContext = new (window.AudioContext || window.webkitAudioContext)());
+    if (activeCtx.state === 'suspended') activeCtx.resume();
+    
+    const osc = activeCtx.createOscillator();
+    const gain = activeCtx.createGain();
+    
+    osc.connect(gain);
+    const target = dest || activeCtx.destination;
+    gain.connect(target);
+    if (!dest && musicDest) gain.connect(musicDest);
+    
+    const now = activeCtx.currentTime;
+    
+    if (degree < 4) { // Kick
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(0.001, now + 0.5);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    } else if (degree < 8) { // Snare
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(250, now);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    } else { // Hihat
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1000, now);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    }
+    
+    osc.start(); osc.stop(now + 0.5);
 }
 
 function playAllAudio() {
@@ -1300,6 +1391,17 @@ async function exportMovie(fullMovie, format) {
                 
                 renderProjectFrame(expCtx, remaining, expCanvas.width, expCanvas.height, upScale, scenesToExport[currentSI]);
                 triggerMusicEvents(scenesToExport[currentSI], remaining, audioCtx, dest);
+                
+                const song = scenesToExport[currentSI].songId ? state.project.songs.find(s => s.id === scenesToExport[currentSI].songId) : null;
+                if (song) {
+                    const framesPerSub = (60 * FPS) / (song.bpm * 2);
+                    const currentSub = Math.floor(remaining / framesPerSub);
+                    const lastSub = Math.floor((remaining - 1) / framesPerSub);
+                    if (currentSub !== lastSub) {
+                        const loopSub = currentSub % (song.bars * 8);
+                        ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub, audioCtx, dest));
+                    }
+                }
 
                 exportPlayers.forEach(p => {
                     if (currentFrame >= p.startFrame && currentFrame < p.startFrame + p.durationFrames) {
