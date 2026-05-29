@@ -1,0 +1,487 @@
+body {
+    background-color: white;
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+body.theater-mode {
+    background-color: black;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    align-items: center;
+    justify-content: center;
+}
+
+#canvas-container {
+    position: relative;
+    background-color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+}
+
+
+body.theater-mode #canvas-container {
+    overflow: hidden;
+    border: none;
+    background: black;
+}
+
+canvas {
+    image-rendering: pixelated;
+    display: block;
+}
+
+#stage {
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+#countdown-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 350px;
+    line-height: 1;
+    font-weight: bold;
+    color: white;
+    /* White text with a solid black outline */
+    text-shadow: 
+        -2px -2px 0 #000,  
+         2px -2px 0 #000,
+        -2px  2px 0 #000,
+         2px  2px 0 #000,
+         0    4px 0 rgba(0,0,0,0.2);
+    pointer-events: none;
+    z-index: 1000;
+}
+
+#brush-size-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+    image-rendering: pixelated;
+}
+
+#ui-bottom-left {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 10px;
+    align-items: flex-start;
+    z-index: 200;
+    pointer-events: none; /* Let clicks pass to stage area */
+}
+
+#ui-bottom-left > * {
+    pointer-events: auto; /* UI elements themselves are clickable */
+}
+
+#controls-row {
+    display: flex;
+    gap: 5px;
+    align-items: flex-end; /* All buttons sit on the same floor */
+}
+
+/* Progress Bar */
+#progress-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 12px; /* Doubled thickness from 6px */
+    background: transparent; /* Track is defined by segment borders */
+    z-index: 300;
+    display: flex;
+}
+
+#progress-bar {
+    width: 0%;
+    height: 100%;
+    background: #0000ff;
+    box-sizing: border-box;
+}
+
+.movie-progress-segment {
+    height: 100%;
+    position: relative;
+    box-sizing: border-box;
+    /* Borders set in JS */
+}
+
+.movie-progress-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0%;
+    /* background set in JS */
+}
+
+/* Hover highlights for clickable elements */
+.clickable-name:hover, .clickable-icon:hover {
+    background-color: rgba(0,0,0,0.1);
+    cursor: pointer;
+    border-radius: 2px;
+}
+.clickable-icon {
+    padding: 2px 4px;
+    margin-left: 2px;
+}
+
+.list-item.active .clickable-name:hover, .list-item.active .clickable-icon:hover {
+    background-color: rgba(0,0,0,0.2);
+}
+
+
+.panel {
+    background: white;
+    border: 1px solid black;
+    padding: 10px;
+    min-width: 250px;
+    max-height: 80vh; /* More flexible height */
+    overflow-y: auto;
+    box-shadow: 4px 4px 0 rgba(0,0,0,0.1);
+}
+
+.panel-header {
+    font-weight: bold;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 5px;
+}
+
+.file-section {
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #eee;
+}
+
+.file-section:last-child {
+    border-bottom: none;
+}
+
+.file-section h3 {
+    margin: 0 0 5px 0;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.export-grid {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.file-section button {
+    padding: 4px 8px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.list-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 4px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+    background: white; /* Ensure solid background for dragging */
+}
+
+.list-item.dragging {
+    opacity: 0.5;
+    background: #f0f0f0;
+}
+
+.list-item.drag-over {
+    border-top: 2px solid blue;
+}
+
+.list-item:hover { background: #f0f0f0; }
+.list-item.active { border-color: black; background: #e0e0e0; }
+
+.backdrop-separator {
+    height: 1px;
+    background: #ddd;
+    margin: 5px 0;
+}
+
+.thumbnail {
+    width: 24px;
+    height: 24px;
+    border: 1px solid #ccc;
+    margin-right: 8px;
+    background-color: white;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+/* Editor Styles */
+#editor-panel {
+    width: auto;
+    max-width: 90vw;
+    max-height: 80vh;
+}
+
+.editor-layout {
+    display: flex;
+    gap: 15px;
+}
+
+.editor-left {
+    width: 120px; /* Increased width for keys, thumbs, and trash */
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.editor-main {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+#editor-canvas-wrap {
+    position: relative;
+    border: 1px solid #ccc;
+    min-width: 320px;
+    min-height: 240px;
+    max-width: 80vw;
+    max-height: 60vh;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #fff;
+    padding: 10px;
+}
+
+#editor-canvas-container {
+    border: 1px solid black;
+    line-height: 0;
+}
+
+
+#editor-canvas {
+    cursor: crosshair;
+}
+
+#editor-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tool-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.main-tools button {
+    font-size: 20px;
+    padding: 5px;
+    width: 40px;
+    height: 40px;
+    background: #eee;
+    border: 1px solid #999;
+}
+
+.main-tools button.active {
+    background: #ccc;
+    border-color: #000;
+    box-shadow: inset 2px 2px 0 rgba(0,0,0,0.2);
+}
+
+.main-tools {
+    justify-content: space-between;
+}
+
+.draw-tools, .history-tools {
+    display: flex;
+    gap: 4px;
+}
+
+.canvas-sizes button {
+    font-size: 11px;
+    padding: 2px 5px;
+}
+
+.column-header {
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.tool-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.color-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    width: 100%;
+    max-width: 400px; /* Force wrapping to stay within canvas width */
+    margin: 10px 0;
+}
+
+.color-swatch {
+    width: 22px;
+    height: 22px;
+    border: 1px solid #999;
+    cursor: pointer;
+}
+
+.color-swatch.active {
+    border-color: #000;
+    outline: 2px solid #000;
+    z-index: 1;
+}
+
+.transparent-pattern {
+    background-image: linear-gradient(45deg, #eee 25%, transparent 25%), 
+                      linear-gradient(-45deg, #eee 25%, transparent 25%), 
+                      linear-gradient(45deg, transparent 75%, #eee 75%), 
+                      linear-gradient(-45deg, transparent 75%, #eee 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+}
+
+.color-swatch.transparent {
+    background: white;
+    position: relative;
+}
+.color-swatch.transparent::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), 
+                      linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc);
+    background-size: 4px 4px;
+    background-position: 0 0, 2px 2px;
+}
+
+.key-badge {
+    font-family: Arial, sans-serif;
+    font-size: 10px;
+    font-weight: bold;
+    color: #444;
+    display: inline-block;
+    padding: 1px 4px;
+    margin: 4px 15px 8px 4px;
+    background: #ccc;
+    border: 1px solid #666;
+    position: relative;
+    line-height: 1;
+    /* Bottom Square (Base footprint) aligned with Top Square's top */
+    box-shadow: 
+        0 3px 0 2px #ccc, 
+        0 3px 0 3px #666;
+}
+
+/* Left connecting line */
+.key-badge::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: -1px;
+    width: 1px;
+    height: 6px;
+    background: #666;
+    transform: skewX(-25deg);
+    transform-origin: top;
+}
+
+/* Right connecting line */
+.key-badge::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    right: -1px;
+    width: 1px;
+    height: 6px;
+    background: #666;
+    transform: skewX(25deg);
+    transform-origin: top;
+}
+
+.icon-btn { cursor: pointer; margin-left: 5px; }
+
+.hidden { display: none !important; }
+
+.plus-btn { width: 30px; height: 30px; margin-top: 10px; }
+
+.square-btn { width: 60px; height: 60px; padding: 0; font-size: 32px; cursor: pointer; border: 1px solid black; background: white; }
+.square-btn:active, .square-btn.active { background: #ccc; box-shadow: inset 2px 2px 0 rgba(0,0,0,0.2); }
+
+#file-btn { margin-right: 12px; }
+#list-toggle-btn { margin-right: 12px; }
+#play-group { 
+    margin-right: 12px; 
+    position: relative;
+    display: inline-block;
+    vertical-align: bottom;
+}
+
+#theater-btn {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    bottom: 65px; 
+    left: 0;
+    z-index: 50;
+    transition: opacity 0.1s;
+}
+
+/* Invisible bridge extending DOWN from the theater button */
+#theater-btn::before {
+    content: '';
+    position: absolute;
+    top: 100%; 
+    left: 0;
+    width: 100%;
+    height: 10px; 
+    background: transparent;
+}
+
+/* Show only on hover of the group */
+#play-group:hover #theater-btn {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Hide when actually playing */
+#play-group.is-playing #theater-btn {
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+.square-btn:active { background: #eee; }
+
+button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}

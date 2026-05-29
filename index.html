@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>drag n film</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="progress-container"><div id="progress-bar"></div></div>
+    <div id="app">
+        <div id="canvas-container">
+            <canvas id="stage"></canvas>
+            <div id="countdown-overlay" class="hidden"></div>
+        </div>
+
+        <div id="ui-bottom-left">
+            <div id="controls-row">
+                <button id="file-btn" class="square-btn">📂</button>
+                <button id="scene-btn" class="square-btn">🎬</button>
+                <button id="instruments-btn" class="square-btn">🎹</button>
+                <button id="list-toggle-btn" class="square-btn">🖼️</button>
+                <button id="record-btn" class="square-btn">🔴</button>
+                <div id="play-group">
+                    <button id="theater-btn" class="square-btn">📽️</button>
+                    <button id="play-btn" class="square-btn">▶️</button>
+                </div>
+                <button id="drag-mode-btn" class="square-btn">🖱️</button>
+                <button id="mic-toggle-btn" class="square-btn">🎙️</button>
+            </div>
+
+            <div id="movie-panel" class="hidden panel">
+                <div class="panel-header">Movie</div>
+                <div class="panel-content">
+                    <div class="file-section">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <h3>Title Card</h3>
+                            <input type="checkbox" id="show-title-card-checkbox" checked>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            <input type="text" id="movie-title-input" placeholder="My Movie" style="width: 100%; box-sizing: border-box;">
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <span style="font-size: 14px; white-space: nowrap;">By </span>
+                                <input type="text" id="movie-creator-input" placeholder="Me" style="width: 100%; box-sizing: border-box;">
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 5px;">
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <span style="font-size: 14px; white-space: nowrap;">Font: </span>
+                                <select id="movie-font-select" style="width: 100%;">
+                                    <option value="Arial">Modern</option>
+                                    <option value="Times New Roman">Old</option>
+                                    <option value="Courier New">Typewriter</option>
+                                    <option value="Impact">Chunky</option>
+                                </select>
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 8px; align-items: center; font-size: 11px;">
+                                <label>BG: <input type="color" id="movie-bg-color" value="#ffffff"></label>
+                                <label>Text: <input type="color" id="movie-text-color" value="#000000"></label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="file-section">
+                        <h3>Scenes</h3>
+                        <div id="scene-list-scroll" style="height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 2px;">
+                            <div id="scene-list" class="list-container"></div>
+                        </div>
+                        <button id="add-scene-btn" class="plus-btn">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="instruments-panel" class="hidden panel">
+                <div class="panel-header">Music</div>
+                <div class="panel-content">
+                    <div class="file-section">
+                        <h3>Instruments</h3>
+                        <div id="instruments-list" class="list-container"></div>
+                        <button id="add-instrument-btn" class="plus-btn">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="instrument-panel" class="hidden panel">
+                <div class="panel-header">Instrument Settings</div>
+                <div class="panel-content">
+                    <div class="file-section">
+                        <h3>Type</h3>
+                        <select id="music-instrument-select" style="width: 100%;">
+                            <option value="piano">🎹 Piano</option>
+                            <option value="synth">🔊 Synth</option>
+                            <option value="flute">🌬️ Flute</option>
+                            <option value="bell">🔔 Bell</option>
+                            <option value="drum">🥁 Drum</option>
+                        </select>
+                    </div>
+                    <div class="file-section">
+                        <h3>Composition</h3>
+                        <div style="display: flex; gap: 10px;">
+                            <div style="flex: 1;">
+                                <div style="font-size: 11px;">Key</div>
+                                <select id="music-key-select" style="width: 100%;">
+                                    <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
+                                    <option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option>
+                                    <option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
+                                </select>
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-size: 11px;">Scale</div>
+                                <select id="music-scale-select" style="width: 100%;">
+                                    <option value="major">Major</option>
+                                    <option value="minor">Minor</option>
+                                    <option value="pentatonic">Pentatonic</option>
+                                    <option value="blues">Blues</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="file-section" style="padding: 10px; border: 1px solid #000; font-size: 11px; line-height: 1.2;">
+                        <strong>Keys</strong><br>
+                        1-7: Notes | 8/9: Octave Down/Up | 0: Chords
+                    </div>
+                </div>
+            </div>
+
+            <div id="file-panel" class="hidden panel">
+                <div class="panel-header">File</div>
+                <div class="panel-content">
+                    <div class="file-section">
+                        <h3>Project</h3>
+                        <button id="new-btn">New Project</button>
+                    </div>
+
+                    <div class="file-section">
+                        <h3>Export Current Scene</h3>
+                        <div class="export-grid">
+                            <button id="export-scene-video-btn">Video (.webm)</button>
+                            <button id="export-scene-gif-btn">GIF (.gif)</button>
+                        </div>
+                    </div>
+
+                    <div id="movie-export-options" class="file-section hidden">
+                        <h3>Export Full Movie</h3>
+                        <div class="export-grid">
+                            <button id="export-movie-video-btn">Video (.webm)</button>
+                            <button id="export-movie-gif-btn">GIF (.gif)</button>
+                        </div>
+                    </div>
+
+                    <div class="file-section">
+                        <h3>Data</h3>
+                        <div class="export-grid">
+                            <button id="export-drag-btn">Export .drag</button>
+                            <button id="import-drag-btn">Import .drag</button>
+                        </div>
+                        <input type="file" id="import-drag-input" class="hidden" accept=".drag">
+                    </div>
+                </div>
+            </div>
+
+            <div id="list-panel" class="hidden panel">
+                <div class="panel-header">Backdrop & Actors</div>
+                <div id="actor-list" class="list-container">
+                    <!-- Actors and Backdrop will be listed here -->
+                </div>
+                <button id="add-actor-btn" class="plus-btn">+</button>
+            </div>
+
+            <div id="editor-panel" class="hidden panel">
+                <div class="editor-layout">
+                    <div class="editor-left">
+                        <div id="costume-list" class="list-container"></div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+                            <button id="add-costume-btn" class="plus-btn" style="margin-top:0;">+</button>
+                            <div style="display: flex; gap: 2px;">
+                                <button id="costume-copy-btn" class="plus-btn" style="margin-top:0;" title="Copy All Costumes">📄</button>
+                                <button id="costume-paste-btn" class="plus-btn" style="margin-top:0;" title="Paste All Costumes">📋</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="editor-main">
+                        <div id="editor-canvas-wrap">
+                            <div id="editor-canvas-container" style="position: relative; line-height: 0;">
+                                <canvas id="editor-canvas" class="transparent-pattern"></canvas>
+                                <canvas id="brush-size-overlay" class="hidden"></canvas>
+                            </div>
+                        </div>
+                        <div id="editor-tools">
+                            <div class="tool-row main-tools">
+                                <div class="draw-tools">
+                                    <button data-tool="pencil" title="Pencil">✎</button>
+                                    <button data-tool="fill" title="Fill">🪣</button>
+                                    <button data-tool="line" title="Line">╱</button>
+                                    <button data-tool="square" title="Square">□</button>
+                                    <button data-tool="circle" title="Circle">○</button>
+                                </div>
+                                <div class="history-tools">
+                                    <button id="undo-btn" title="Undo">⟲</button>
+                                    <button id="redo-btn" title="Redo">⟳</button>
+                                    <button id="copy-btn" title="Copy">📄</button>
+                                    <button id="paste-btn" title="Paste">📋</button>
+                                </div>
+                            </div>
+
+                            <div id="color-palette" class="color-palette"></div>
+
+                            <div class="editor-settings-columns" style="display: flex; gap: 20px;">
+                                <div class="tool-column">
+                                    <div class="column-header">Brush Size:</div>
+                                    <input type="range" id="pencil-size" min="1" max="50" value="5">
+                                </div>
+                                <div class="tool-column canvas-sizes">
+                                    <div class="column-header">Canvas Size:</div>
+                                    <div class="size-buttons">
+                                        <button data-size="32">Small</button>
+                                        <button data-size="64">Med</button>
+                                        <button data-size="128">Big</button>
+                                        <button data-size="256">Huge</button>
+                                        <button data-size="512">Giant</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
