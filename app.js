@@ -309,9 +309,6 @@ function renderLoop() {
     }
 
     if (!state.ui.isTheaterMode && !state.ui.isPlaying && state.ui.selectedActorId === 'backdrop') drawSelectionOutline(ctx, margin, margin, state.project.width, state.project.height);
-    if (!state.ui.isTheaterMode && !state.ui.isPlaying && state.ui.selectedActorId === 'musician') {
-        ctx.strokeStyle = '#00f'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(margin+2, margin+2, state.project.width-4, state.project.height-4); ctx.setLineDash([]);
-    }
 
     if (state.ui.isPlaying && state.ui.currentFrame >= maxFrames && state.project.currentSceneIndex === state.project.scenes.length - 1) { ctx.fillStyle = "black"; ctx.font = "bold 20px Arial"; ctx.fillText("Fin.", margin + 10, margin + state.project.height - 15); }
     requestAnimationFrame(renderLoop);
@@ -376,7 +373,7 @@ function drawSelectionOutline(ctx, x, y, w, h) {
 
 function getMaxFrames(scene) {
     let max = 0; if (!scene) return 0;
-    [scene.backdrop, scene.musician, ...scene.actors].forEach(t => {
+    [scene.backdrop, ...scene.actors].forEach(t => {
         const rec = t.recordings[t.recordings.length - 1];
         if (rec && rec.frames) {
             const keys = Object.keys(rec.frames).map(Number);
@@ -403,7 +400,7 @@ function onStageMouseDown(e) {
     }
     if (!hit) {
         if (mx >= 0 && mx <= state.project.width && my >= 0 && my <= state.project.height) {
-            state.ui.selectedActorId = (e.shiftKey) ? 'musician' : 'backdrop';
+            state.ui.selectedActorId = 'backdrop';
         } else state.ui.selectedActorId = null;
     }
     renderActorList();
@@ -412,7 +409,7 @@ function onStageMouseMove(e) {
     const rect = stage.getBoundingClientRect(), sx = stage.width / rect.width, sy = stage.height / rect.height;
     const mx = (e.clientX - rect.left) * sx - state.ui.stageMargin, my = (e.clientY - rect.top) * sy - state.ui.stageMargin;
     const isHoverActive = state.ui.dragMode === 'hover' && (state.ui.isRecording || state.countdownTimer);
-    if (isHoverActive && state.ui.selectedActorId && !['backdrop', 'musician'].includes(state.ui.selectedActorId)) {
+    if (isHoverActive && state.ui.selectedActorId && state.ui.selectedActorId !== 'backdrop') {
         const actor = getCurrentScene().actors.find(a => a.id === state.ui.selectedActorId);
         if (actor) { actor.x = mx; actor.y = my; }
     } else if (draggedActor) { draggedActor.x = mx - dragOffsetX; draggedActor.y = my - dragOffsetY; }
@@ -593,20 +590,19 @@ function toggleDragMode() { state.ui.dragMode = (state.ui.dragMode === 'drag') ?
 function startRecordingProcess() {
     const btn = document.getElementById('record-btn'); if (state.ui.isRecording) { stopRecording(); return; }
     if (state.countdownTimer) { clearInterval(state.countdownTimer); state.countdownTimer = null; document.getElementById('countdown-overlay').classList.add('hidden'); btn.textContent = '🔴'; return; }
-    const t = (state.ui.selectedActorId === 'backdrop' ? getCurrentScene().backdrop : (state.ui.selectedActorId === 'musician' ? getCurrentScene().musician : getCurrentScene().actors.find(a => a.id === state.ui.selectedActorId)));
-    if (!t) { alert("Select actor/musician/backdrop!"); return; }
+    const t = (state.ui.selectedActorId === 'backdrop' ? getCurrentScene().backdrop : getCurrentScene().actors.find(a => a.id === state.ui.selectedActorId));
+    if (!t) { alert("Select actor or backdrop!"); return; }
     const overlay = document.getElementById('countdown-overlay'); overlay.innerHTML = ''; overlay.classList.remove('hidden'); btn.textContent = '❌';
     let count = 3; overlay.textContent = count; state.countdownTimer = setInterval(() => { count--; if (count > 0) overlay.textContent = count; else { clearInterval(state.countdownTimer); state.countdownTimer = null; overlay.classList.add('hidden'); startRecording(t); } }, 1000);
 }
 async function startRecording(t) { 
     state.ui.isRecording = true; document.getElementById('record-btn').textContent = '⏹️'; 
-    const isMusician = t.id === 'musician';
-    const newRec = { frames: isMusician ? {} : [], audio: null }; 
+    const newRec = { frames: [], audio: null }; 
     t.recordings.push(newRec); 
     state.ui.currentFrame = 0;
     state.ui.lastFrameTime = performance.now();
     state.ui.timeAccumulator = 0;
-    if (!isMusician) newRec.frames[0] = { x: t.x, y: t.y, costumeIndex: t.currentCostume }; 
+    newRec.frames[0] = { x: t.x, y: t.y, costumeIndex: t.currentCostume }; 
     playAllAudio();
     if (state.ui.micEnabled && micStream) { mediaRecorder = new MediaRecorder(micStream); audioChunks = []; mediaRecorder.ondataavailable = e => audioChunks.push(e.data); mediaRecorder.onstop = () => { const blob = new Blob(audioChunks, { type: 'audio/webm' }); t.recordings[t.recordings.length - 1].audio = URL.createObjectURL(blob); renderActorList(); }; mediaRecorder.start(); }
 }
@@ -636,48 +632,6 @@ function togglePlayback(asTheater, startFromBeginning) {
         state.ui.timeAccumulator = 0;
         if (!state.ui.isTitleCardActive) playAllAudio();
         renderActorList(); renderSceneList();
-    }
-}
-
-function playNote(scene, noteIndex, isChord, octaveOffset = 0, ctx = null, dest = null) {
-    const activeCtx = ctx || audioContext || (audioContext = new (window.AudioContext || window.webkitAudioContext)());
-    if (activeCtx.state === 'suspended') activeCtx.resume();
-
-    const mu = scene.musician;
-    const inst = instruments[mu.instrument];
-    const baseFreq = 261.63 * Math.pow(2, keyFrequencies.indexOf(mu.key) / 12);
-    const scale = scales[mu.scale];
-
-    const notes = isChord ? [noteIndex, (noteIndex + 2), (noteIndex + 4)] : [noteIndex];
-
-    notes.forEach(ni => {
-        const osc = activeCtx.createOscillator();
-        const gain = activeCtx.createGain();
-        const noteShift = scale[ni % scale.length] + Math.floor(ni / scale.length) * 12 + (octaveOffset * 12);
-        osc.frequency.value = baseFreq * Math.pow(2, noteShift / 12);
-        osc.type = inst.type;
-
-        osc.connect(gain);
-        // Connect to provided destination node or fallback to main output
-        const target = dest || activeCtx.destination;
-        gain.connect(target);
-
-        const now = activeCtx.currentTime;
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-        osc.start(); osc.stop(now + 0.5);
-    });
-}
-
-function triggerMusicEvents(scene, frameIndex, ctx = null, dest = null) {
-    const rec = scene.musician.recordings[scene.musician.recordings.length - 1];
-    if (!rec || !rec.frames) return;
-
-    const events = rec.frames[frameIndex];
-    if (events && Array.isArray(events)) {
-        events.forEach(f => {
-            playNote(scene, f.note, f.chord, f.octave || 0, ctx, dest);
-        });
     }
 }
 
@@ -770,7 +724,7 @@ function playAllAudio() {
             const audio = new Audio(rec.audio), source = audioContext.createMediaElementSource(audio), panner = audioContext.createStereoPanner(); 
             source.connect(panner); panner.connect(audioContext.destination); 
             audio.play(); activeAudioPlayers.push({ audio, panner, target: t, source }); 
-            if (!['backdrop', 'musician'].includes(t.id)) { 
+            if (t.id !== 'backdrop') { 
                 const iv = setInterval(() => { 
                     if (audio.paused) { clearInterval(iv); return; } 
                     const { x } = getActorDisplayState(t, state.ui.currentFrame); 
@@ -1087,7 +1041,6 @@ function addActor() { const a = { id: 'actor_' + Date.now(), name: 'Actor ' + (g
 function renderActorList() {
     actorList.innerHTML = ''; const scene = getCurrentScene(); if (!scene) return;
     actorList.appendChild(createListItem(scene.backdrop, false, -1));
-    actorList.appendChild(createListItem(scene.musician, false, -2));
     const sep = document.createElement('div'); sep.className = 'backdrop-separator'; actorList.appendChild(sep);
     scene.actors.forEach((a, i) => {
         const item = createListItem(a, true, i); item.draggable = true;
@@ -1108,43 +1061,28 @@ function createListItem(t, canDel, index) {
     thumbWrapper.style.alignItems = 'center';
     thumbWrapper.style.justifyContent = 'center';
     
-    if (t.id === 'musician') {
-        const emoji = document.createElement('span');
-        emoji.style.fontSize = '18px';
-        emoji.textContent = instruments[t.instrument].icon;
-        thumbWrapper.appendChild(emoji);
-    } else {
-        const { ci } = getActorDisplayState(t, 0);
-        const img = document.createElement('img');
-        img.src = t.costumes[ci].canvas.toDataURL();
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'contain';
-        thumbWrapper.appendChild(img);
-    }
+    const { ci } = getActorDisplayState(t, 0);
+    const img = document.createElement('img');
+    img.src = t.costumes[ci].canvas.toDataURL();
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'contain';
+    thumbWrapper.appendChild(img);
+    
     div.appendChild(thumbWrapper);
     const name = document.createElement('span'); name.textContent = t.name; if (t.id !== 'backdrop') { name.className = 'clickable-name'; name.onclick = (e) => { e.stopPropagation(); const nn = prompt("Rename:", t.name); if (nn) { t.name = nn; renderActorList(); saveProject(); } }; } div.appendChild(name);
     const rec = t.recordings[t.recordings.length - 1];
-    if (rec && rec.frames?.length > 0 && t.id !== 'musician') { 
+    if (rec && rec.frames?.length > 0) { 
         const i = document.createElement('span'); 
         i.textContent = ' 🎞'; 
         i.className = 'icon-btn clickable-icon'; 
-        i.onclick = (e) => { e.stopPropagation(); if (confirm("Delete dragging?")) { const f0 = rec.frames[0]; if (f0 && !['backdrop', 'musician'].includes(t.id)) { t.x = f0.x; t.y = f0.y; t.currentCostume = f0.costumeIndex; } rec.frames = []; saveProject(); renderActorList(); } }; 
+        i.onclick = (e) => { e.stopPropagation(); if (confirm("Delete dragging?")) { const f0 = rec.frames[0]; if (f0 && t.id !== 'backdrop') { t.x = f0.x; t.y = f0.y; t.currentCostume = f0.costumeIndex; } rec.frames = []; saveProject(); renderActorList(); } }; 
         div.appendChild(i); 
     }
     
-    // For musician, "frames" means note events, not dragging, but we still want a way to delete music performance
-    if (rec && rec.frames?.length > 0 && t.id === 'musician') {
-        const i = document.createElement('span'); 
-        i.textContent = ' 🎵'; 
-        i.className = 'icon-btn clickable-icon'; 
-        i.title = "Delete music performance";
-        i.onclick = (e) => { e.stopPropagation(); if (confirm("Delete music performance?")) { rec.frames = []; saveProject(); renderActorList(); } }; 
-        div.appendChild(i); 
-    }
     if (rec && rec.audio) { const mic = document.createElement('span'); mic.textContent = ' 🎤'; mic.className = 'icon-btn clickable-icon'; mic.onclick = (e) => { e.stopPropagation(); if (confirm("Delete audio?")) { rec.audio = null; saveProject(); renderActorList(); } }; div.appendChild(mic); }
     const acts = document.createElement('div'); acts.style.marginLeft = 'auto'; acts.style.display = 'flex'; acts.style.gap = '2px';
-    const edit = document.createElement('button'); edit.textContent = '✎'; edit.onclick = (e) => { e.stopPropagation(); if (t.id === 'musician') togglePanel('music'); else openEditor(t); }; acts.appendChild(edit);
+    const edit = document.createElement('button'); edit.textContent = '✎'; edit.onclick = (e) => { e.stopPropagation(); openEditor(t); }; acts.appendChild(edit);
     if (canDel) { const del = document.createElement('button'); del.textContent = '🗑'; del.onclick = (e) => { e.stopPropagation(); if (confirm(`Delete actor "${t.name}"?`)) { const s = getCurrentScene(); s.actors = s.actors.filter(ac => ac.id !== t.id); renderActorList(); saveProject(); } }; acts.appendChild(del); }
     div.appendChild(acts); div.onclick = () => { state.ui.selectedActorId = t.id; renderActorList(); }; return div;
 }
@@ -1175,7 +1113,6 @@ async function saveProject() {
         name: s.name, 
         songId: s.songId,
         backdrop: await serializeTarget(s.backdrop), 
-        musician: { ...s.musician, recordings: await Promise.all(s.musician.recordings.map(serializeRecording)) }, 
         actors: await Promise.all(s.actors.map(serializeTarget)) 
     }))); 
     localStorage.setItem('drag-n-film-project', JSON.stringify({ 
@@ -1223,16 +1160,8 @@ async function loadProject() {
         name: s.name, 
         songId: s.songId || null,
         backdrop: await deserializeTarget(s.backdrop), 
-        musician: await deserializeMusician(s.musician), 
         actors: await Promise.all(s.actors.map(deserializeTarget)) 
     }))); 
-}
-async function deserializeMusician(m) { 
-    if (!m) return { id: 'musician', name: 'Piano', instrument: 'piano', key: 'C', scale: 'major', octaveOffset: 0, chordMode: false, recordings: [] };
-    const res = { ...m }; 
-    if (res.octaveOffset === undefined) res.octaveOffset = 0;
-    res.recordings = await Promise.all((m.recordings || []).map(deserializeRecording)); 
-    return res; 
 }
 async function deserializeRecording(r) { 
     let audio = null; 
@@ -1276,7 +1205,6 @@ function importDragFile(e) {
                 name: s.name, 
                 songId: s.songId || null,
                 backdrop: await deserializeTarget(s.backdrop), 
-                musician: await deserializeMusician(s.musician), 
                 actors: await Promise.all(s.actors.map(deserializeTarget)) 
             })));
             updatePlayMovieButton(); updateMovieExportButtons(); syncMovieInputs(); renderSceneList(); renderActorList(); saveProject(); togglePanel(null);
@@ -1289,7 +1217,6 @@ async function exportDragFile() {
         name: s.name, 
         songId: s.songId,
         backdrop: await serializeTarget(s.backdrop), 
-        musician: { ...s.musician, recordings: await Promise.all(s.musician.recordings.map(serializeRecording)) }, 
         actors: await Promise.all(s.actors.map(serializeTarget)) 
     })));
     const blob = new Blob([JSON.stringify({ 
@@ -1365,7 +1292,7 @@ async function exportMovie(fullMovie, format) {
                             p.audio.currentTime = (currentFrame - p.startFrame) * FRAME_DURATION / 1000;
                             p.audio.play();
                         }
-                        if (p.target.id !== 'backdrop' && p.target.id !== 'musician') {
+                        if (p.target.id !== 'backdrop') {
                             const { x } = getActorDisplayState(p.target, currentFrame - p.startFrame);
                             p.panner.pan.value = ((x / state.project.width) * 2 - 1) * 0.5;
                         }
