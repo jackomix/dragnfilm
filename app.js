@@ -133,27 +133,39 @@ function renderLoop() {
     const margin = state.ui.stageMargin, scene = getCurrentScene();
     if (!scene) { requestAnimationFrame(renderLoop); return; }
     
-    let elapsed = (state.ui.isPlaying || state.ui.isRecording) ? Date.now() - state.ui.playbackStartTime : 0;
-    const titleCardDuration = state.project.showTitleCard ? 2000 : 0;
+    const now = performance.now();
+    const isPlayingOrRecording = state.ui.isPlaying || state.ui.isRecording;
+
+    if (isPlayingOrRecording) {
+        if (now - state.ui.lastFrameTime >= FRAME_DURATION) {
+            state.ui.currentFrame++;
+            state.ui.lastFrameTime = now;
+            
+            // Trigger Music Events (Moved inside the throttle)
+            if (!state.ui.isTitleCardActive) {
+                triggerMusicEvents(scene, state.ui.currentFrame);
+            }
+        }
+    } else {
+        state.ui.lastFrameTime = now;
+    }
+
+    const elapsed = state.ui.currentFrame * FRAME_DURATION;
+    const titleCardDurationFrames = state.project.showTitleCard ? 120 : 0;
+    const maxFrames = getMaxFrames(scene) || 30;
 
     const maxTime = getMaxDuration(scene) || 500;
     updateProgressBarUI(elapsed, maxTime);
 
-    // Trigger Music Events (Real-time playback) - Only if NOT showing title card
-    if ((state.ui.isPlaying || state.ui.isRecording) && !state.ui.isTitleCardActive) {
-        triggerMusicEvents(scene, elapsed, state.ui.lastAudioTime || 0);
-        state.ui.lastAudioTime = elapsed;
-    }
-
     if (state.ui.isTheaterMode && state.ui.isTitleCardActive && state.project.showTitleCard) {
-        if (elapsed < titleCardDuration) {
+        if (state.ui.currentFrame < titleCardDurationFrames) {
             drawTitleCard(ctx, margin);
             requestAnimationFrame(renderLoop);
             return;
         } else {
             state.ui.isTitleCardActive = false;
-            state.ui.playbackStartTime = Date.now();
-            elapsed = 0;
+            state.ui.currentFrame = 0;
+            state.ui.lastFrameTime = performance.now();
             playAllAudio();
         }
     }
@@ -165,15 +177,15 @@ function renderLoop() {
 
     const bd = scene.backdrop;
 
-    if (state.ui.isPlaying && elapsed >= maxTime) {
+    if (state.ui.isPlaying && state.ui.currentFrame >= maxFrames) {
         if (state.project.currentSceneIndex < state.project.scenes.length - 1) {
             stopAllAudio();
             state.project.currentSceneIndex++;
-            state.ui.playbackStartTime = Date.now();
+            state.ui.currentFrame = 0;
+            state.ui.lastFrameTime = performance.now();
             playAllAudio();
             renderActorList();
             renderSceneList();
-            elapsed = 0;
         } else {
             togglePlayback();
         }
@@ -228,7 +240,7 @@ function renderLoop() {
         ctx.strokeStyle = '#00f'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(margin+2, margin+2, state.project.width-4, state.project.height-4); ctx.setLineDash([]);
     }
 
-    if (state.ui.isPlaying && elapsed >= maxTime && state.project.currentSceneIndex === state.project.scenes.length - 1) { ctx.fillStyle = "black"; ctx.font = "bold 20px Arial"; ctx.fillText("Fin.", margin + 10, margin + state.project.height - 15); }
+    if (state.ui.isPlaying && state.ui.currentFrame >= maxFrames && state.project.currentSceneIndex === state.project.scenes.length - 1) { ctx.fillStyle = "black"; ctx.font = "bold 20px Arial"; ctx.fillText("Fin.", margin + 10, margin + state.project.height - 15); }
     requestAnimationFrame(renderLoop);
 }
 
@@ -287,6 +299,18 @@ function drawSelectionOutline(ctx, x, y, w, h) {
     ctx.strokeStyle = 'red'; ctx.lineWidth = 2; ctx.strokeRect(x - 1, y - 1, w + 2, h + 2); 
     ctx.strokeStyle = 'yellow'; ctx.setLineDash([4, 4]); ctx.lineDashOffset = -state.ui.lineDashOffset;
     ctx.strokeRect(x - 1, y - 1, w + 2, h + 2); ctx.setLineDash([]); ctx.lineDashOffset = 0;
+}
+
+function getMaxFrames(scene) {
+    let max = 0; if (!scene) return 0;
+    [scene.backdrop, scene.musician, ...scene.actors].forEach(t => {
+        const rec = t.recordings[t.recordings.length - 1];
+        if (rec && rec.frames) {
+            const last = Array.isArray(rec.frames) ? rec.frames.length - 1 : 0;
+            if (last > max) max = last;
+        }
+    });
+    return max;
 }
 
 function findFrameAtTime(frames, time) { if (!frames || frames.length === 0) return null; let best = frames[0]; for (let f of frames) { if (f.time <= time) best = f; else break; } return best; }
