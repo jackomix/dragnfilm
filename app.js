@@ -939,6 +939,40 @@ function deleteSong(songId) {
     saveProject();
 }
 
+let previewLoopInterval = null;
+function startSongPreview() {
+    if (state.ui.isPreviewPlaying) return;
+    const songId = state.ui.activeSongId;
+    if (!songId) return;
+    const song = state.project.songs.find(s => s.id === songId);
+    if (!song) return;
+
+    state.ui.isPreviewPlaying = true;
+    state.ui.previewFrame = 0;
+    
+    previewLoopInterval = setInterval(() => {
+        if (!state.ui.isPreviewPlaying) { clearInterval(previewLoopInterval); return; }
+        
+        const framesPerSub = (60 * FPS) / (song.bpm * 2);
+        const currentSub = Math.floor(state.ui.previewFrame / framesPerSub);
+        const lastSub = Math.floor((state.ui.previewFrame - 1) / framesPerSub);
+        
+        if (currentSub !== lastSub) {
+            const loopSub = currentSub % (song.bars * 8);
+            ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
+            renderSongStudioGrid();
+        }
+        state.ui.previewFrame++;
+    }, 1000/60);
+}
+
+function stopSongPreview() {
+    state.ui.isPreviewPlaying = false;
+    if (previewLoopInterval) clearInterval(previewLoopInterval);
+    state.ui.previewFrame = 0;
+    renderSongStudioGrid();
+}
+
 function openSongStudio(song) {
     state.ui.activeSongId = song.id;
     state.ui.activePanel = 'songEditor';
