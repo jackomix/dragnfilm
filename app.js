@@ -515,8 +515,10 @@ function bindEvents() {
             renderSongStudioGrid();
         };
     });
-    document.getElementById('studio-preview-play-btn').onclick = startSongPreview;
-    document.getElementById('studio-preview-stop-btn').onclick = stopSongPreview;
+    document.getElementById('studio-preview-toggle-btn').onclick = () => {
+        if (state.ui.isPreviewPlaying) stopSongPreview();
+        else startSongPreview();
+    };
     const canvas = document.getElementById('studio-grid-canvas');
     canvas.onclick = (e) => {
         const songId = state.ui.activeSongId;
@@ -846,12 +848,21 @@ function renderSoundtrackPanel() {
         const div = document.createElement('div');
         div.className = 'list-item';
         
+        const thumbWrapper = document.createElement('div');
+        thumbWrapper.className = 'thumbnail transparent-pattern';
+        thumbWrapper.style.display = 'flex';
+        thumbWrapper.style.alignItems = 'center';
+        thumbWrapper.style.justifyContent = 'center';
+        thumbWrapper.textContent = '🎬';
+        div.appendChild(thumbWrapper);
+        
         const name = document.createElement('span');
         name.textContent = s.name;
         div.appendChild(name);
         
         const select = document.createElement('select');
         select.style.width = '120px';
+        select.style.marginLeft = 'auto';
         const noneOpt = document.createElement('option');
         noneOpt.value = '';
         noneOpt.textContent = 'None';
@@ -878,6 +889,14 @@ function renderSoundtrackPanel() {
         const div = document.createElement('div');
         div.className = 'list-item';
         
+        const thumbWrapper = document.createElement('div');
+        thumbWrapper.className = 'thumbnail transparent-pattern';
+        thumbWrapper.style.display = 'flex';
+        thumbWrapper.style.alignItems = 'center';
+        thumbWrapper.style.justifyContent = 'center';
+        thumbWrapper.textContent = '🎵';
+        div.appendChild(thumbWrapper);
+        
         const name = document.createElement('span');
         name.textContent = song.name;
         name.className = 'clickable-name';
@@ -892,8 +911,9 @@ function renderSoundtrackPanel() {
         div.appendChild(name);
         
         const acts = document.createElement('div');
+        acts.style.marginLeft = 'auto';
         acts.style.display = 'flex';
-        acts.style.gap = '5px';
+        acts.style.gap = '2px';
         
         const editBtn = document.createElement('button');
         editBtn.textContent = '✎';

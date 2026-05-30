@@ -503,39 +503,49 @@ button:disabled {
     padding-bottom: 3px;
 }
 
-.song-editor-layout {
-    display: flex;
-    gap: 0;
-    height: 100%;
-}
-.instrument-sidebar {
-    width: 100px;
+#song-editor-panel {
+    width: 90%;
+    height: 80%;
+    top: 5%;
+    left: 5%;
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding-right: 5px;
-    border-right: 1px solid #eee;
 }
-.inst-tab {
-    padding: 8px 5px;
-    font-size: 11px;
-    text-align: left;
-    background: #f8f8f8;
-    border: 1px solid #eee;
-    border-left: 4px solid var(--inst-color);
-    cursor: pointer;
-    border-radius: 2px;
-}
-.inst-tab.active {
-    background: white;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    font-weight: bold;
-}
-.piano-roll-wrap {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-}
+
+.song-editor-layout {
+        display: flex;
+        gap: 0;
+        flex: 1;
+        overflow: hidden;
+    }
+    .instrument-sidebar {
+        width: 120px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        padding-right: 5px;
+        border-right: 1px solid #eee;
+    }
+    .inst-tab {
+        padding: 8px 5px;
+        font-size: 11px;
+        text-align: left;
+        background: #eee;
+        border: 1px solid #999;
+        border-left: 4px solid var(--inst-color);
+        cursor: pointer;
+    }
+    .inst-tab.active {
+        background: #ccc;
+        border-color: #000;
+        box-shadow: inset 2px 2px 0 rgba(0,0,0,0.2);
+        font-weight: bold;
+    }
+    .piano-roll-wrap {
+        flex: 1;
+        position: relative;
+        overflow: auto;
+    }
 #studio-grid-canvas {
     display: block;
     cursor: crosshair;
