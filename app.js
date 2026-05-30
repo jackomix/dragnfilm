@@ -1062,7 +1062,7 @@ function renderSongStudioGrid() {
     }
     
     // Draw notes for active track
-    const trackColors = { lead: '#4a90e2', chords: '#d0021b', bass: '#7ed321', drums: '#f5a623' };
+    const trackColors = { lead: '#4a90e2', chords: '#ff00ff', bass: '#7ed321', drums: '#ffff00' };
     const track = song.tracks[state.ui.activeTrack];
     ctx.fillStyle = trackColors[state.ui.activeTrack];
     
