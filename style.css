@@ -486,6 +486,23 @@ button:disabled {
     filter: grayscale(1);
 }
 
+.soundtrack-layout {
+    display: flex;
+    gap: 15px;
+    height: 100%;
+}
+.library-col, .scenes-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+.library-col h3, .scenes-col h3 {
+    font-size: 14px;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 3px;
+}
+
 /* Song Studio Overlay */
 .overlay {
     position: fixed;

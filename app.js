@@ -780,10 +780,6 @@ function renderSoundtrackPanel() {
     state.project.scenes.forEach((s, i) => {
         const div = document.createElement('div');
         div.className = 'list-item';
-        div.style.display = 'flex';
-        div.style.justifyContent = 'space-between';
-        div.style.alignItems = 'center';
-        div.style.padding = '5px';
         
         const name = document.createElement('span');
         name.textContent = s.name;
@@ -816,10 +812,6 @@ function renderSoundtrackPanel() {
     state.project.songs.forEach((song, i) => {
         const div = document.createElement('div');
         div.className = 'list-item';
-        div.style.display = 'flex';
-        div.style.justifyContent = 'space-between';
-        div.style.alignItems = 'center';
-        div.style.padding = '5px';
         
         const name = document.createElement('span');
         name.textContent = song.name;
