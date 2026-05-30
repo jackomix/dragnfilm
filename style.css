@@ -162,6 +162,8 @@ canvas {
     margin-bottom: 10px;
     border-bottom: 1px solid #000;
     padding-bottom: 5px;
+    display: flex;
+    align-items: center;
 }
 
 .file-section {
@@ -534,6 +536,8 @@ button:disabled {
         border: 1px solid #999;
         border-left: 4px solid var(--inst-color);
         cursor: pointer;
+        width: 100%;
+        box-sizing: border-box;
     }
     .inst-tab.active {
         background: #ccc;

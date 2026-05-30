@@ -981,6 +981,7 @@ function startSongPreview() {
     state.ui.previewFrame = -1;
     state.ui.lastPreviewTime = performance.now();
     state.ui.previewAccumulator = 0;
+    document.getElementById('studio-preview-toggle-btn').textContent = '⏹️';
 
     function previewLoop() {
         if (!state.ui.isPreviewPlaying) return;
@@ -1013,6 +1014,7 @@ function startSongPreview() {
 function stopSongPreview() {
     state.ui.isPreviewPlaying = false;
     state.ui.previewFrame = 0;
+    document.getElementById('studio-preview-toggle-btn').textContent = '▶️';
     renderSongStudioGrid();
 }
 
