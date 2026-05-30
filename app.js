@@ -914,13 +914,11 @@ function renderSoundtrackPanel() {
         acts.style.gap = '2px';
         
         const editBtn = document.createElement('button');
-        editBtn.className = 'square-btn';
         editBtn.textContent = '✎';
         editBtn.onclick = () => openSongStudio(song);
         acts.appendChild(editBtn);
         
         const delBtn = document.createElement('button');
-        delBtn.className = 'square-btn';
         delBtn.textContent = '🗑';
         delBtn.onclick = () => {
             if (confirm(`Delete song "${song.name}"?`)) {
