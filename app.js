@@ -961,8 +961,6 @@ function deleteSong(songId) {
     });
     renderSoundtrackPanel();
     saveProject();
-}
-
 function startSongPreview() {
     if (state.ui.isPreviewPlaying) return;
     const songId = state.ui.activeSongId;
