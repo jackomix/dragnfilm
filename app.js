@@ -855,21 +855,20 @@ function renderSoundtrackPanel() {
         const div = document.createElement('div');
         div.className = 'list-item';
         
-        const thumbWrapper = document.createElement('div');
-        thumbWrapper.className = 'thumbnail transparent-pattern';
-        thumbWrapper.style.display = 'flex';
-        thumbWrapper.style.alignItems = 'center';
-        thumbWrapper.style.justifyContent = 'center';
-        thumbWrapper.textContent = '🎬';
-        div.appendChild(thumbWrapper);
+        const { ci } = getActorDisplayState(s.backdrop, 0);
+        const thumb = document.createElement('img'); 
+        thumb.className = 'thumbnail transparent-pattern'; 
+        thumb.src = s.backdrop.costumes[ci].canvas.toDataURL(); 
+        div.appendChild(thumb);
         
         const name = document.createElement('span');
         name.textContent = s.name;
         div.appendChild(name);
         
         const select = document.createElement('select');
-        select.style.width = '120px';
+        select.style.width = '140px';
         select.style.marginLeft = 'auto';
+        select.style.padding = '4px';
         const noneOpt = document.createElement('option');
         noneOpt.value = '';
         noneOpt.textContent = 'None';
@@ -896,14 +895,6 @@ function renderSoundtrackPanel() {
         const div = document.createElement('div');
         div.className = 'list-item';
         
-        const thumbWrapper = document.createElement('div');
-        thumbWrapper.className = 'thumbnail transparent-pattern';
-        thumbWrapper.style.display = 'flex';
-        thumbWrapper.style.alignItems = 'center';
-        thumbWrapper.style.justifyContent = 'center';
-        thumbWrapper.textContent = '🎵';
-        div.appendChild(thumbWrapper);
-        
         const name = document.createElement('span');
         name.textContent = song.name;
         name.className = 'clickable-name';
@@ -923,11 +914,13 @@ function renderSoundtrackPanel() {
         acts.style.gap = '2px';
         
         const editBtn = document.createElement('button');
+        editBtn.className = 'square-btn';
         editBtn.textContent = '✎';
         editBtn.onclick = () => openSongStudio(song);
         acts.appendChild(editBtn);
         
         const delBtn = document.createElement('button');
+        delBtn.className = 'square-btn';
         delBtn.textContent = '🗑';
         delBtn.onclick = () => {
             if (confirm(`Delete song "${song.name}"?`)) {

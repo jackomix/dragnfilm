@@ -72,7 +72,7 @@
 
             <div id="soundtrack-panel" class="hidden panel">
                 <div class="panel-header">Soundtrack</div>
-                <div class="panel-content soundtrack-layout">
+                <div class="soundtrack-layout">
                     <div class="library-col">
                         <h3>Library</h3>
                         <div id="song-library-list" class="list-container"></div>
@@ -87,13 +87,15 @@
 
             <div id="song-editor-panel" class="hidden panel">
                 <div class="panel-header">
-                    <input type="text" id="studio-song-name" style="font-weight: bold; background: transparent; border: none; width: 120px;">
-                    <div style="margin-left: auto; display: flex; gap: 10px; align-items: center; font-size: 11px;">
-                        <span>BPM: <input type="number" id="studio-bpm" value="120" style="width: 35px;"></span>
-                        <select id="studio-key" style="width: 40px;"></select>
-                        <select id="studio-scale" style="width: 70px;"></select>
-                        <span>Bars: <input type="number" id="studio-bars" value="4" style="width: 30px;"></span>
-                        <button id="studio-preview-toggle-btn" class="preview-btn">▶️</button>
+                    <div class="song-editor-header">
+                        <input type="text" id="studio-song-name">
+                        <div class="song-editor-controls">
+                            <span>BPM: <input type="number" id="studio-bpm" value="120"></span>
+                            <select id="studio-key"></select>
+                            <select id="studio-scale"></select>
+                            <span>Bars: <input type="number" id="studio-bars" value="4"></span>
+                            <button id="studio-preview-toggle-btn" class="preview-btn">▶️</button>
+                        </div>
                     </div>
                 </div>
                 <div class="song-editor-layout">

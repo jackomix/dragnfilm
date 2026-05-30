@@ -498,21 +498,69 @@ button:disabled {
     display: flex;
     flex-direction: column;
 }
+#soundtrack-panel {
+    width: 500px;
+}
+
 .library-col h3, .scenes-col h3 {
-    font-size: 14px;
-    margin-bottom: 5px;
+    font-size: 13px;
+    margin-top: 0;
+    margin-bottom: 8px;
     border-bottom: 1px solid #eee;
-    padding-bottom: 3px;
+    padding-bottom: 4px;
+    color: #444;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#add-song-btn {
+    margin-top: 5px;
+    margin-bottom: 0;
 }
 
 #song-editor-panel {
-    width: 90%;
-    height: 80%;
-    top: 5%;
-    left: 5%;
+    width: 96%;
+    height: 90%;
+    top: 2%;
+    left: 2%;
     display: flex;
     flex-direction: column;
+    position: fixed; /* Ensure it stays in place */
+    z-index: 1000;
 }
+
+.song-editor-header {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+#studio-song-name {
+    font-weight: bold;
+    background: transparent;
+    border: none;
+    width: 200px;
+    font-size: 16px;
+    outline: none;
+}
+
+.song-editor-controls {
+    margin-left: auto;
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    font-size: 13px;
+}
+
+.song-editor-controls input, .song-editor-controls select {
+    padding: 2px;
+    border: 1px solid #ccc;
+}
+
+#studio-bpm { width: 45px; }
+#studio-bars { width: 40px; }
+#studio-key { width: 50px; }
+#studio-scale { width: 80px; }
 
 .song-editor-layout {
         display: flex;
