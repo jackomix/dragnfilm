@@ -1385,8 +1385,9 @@ async function exportMovie(fullMovie, format) {
                 const song = scenesToExport[currentSI].songId ? state.project.songs.find(s => s.id === scenesToExport[currentSI].songId) : null;
                 if (song) {
                     const framesPerSub = (60 * FPS) / (song.bpm * 2);
-                    const currentSub = Math.floor(remaining / framesPerSub);
-                    const lastSub = Math.floor((remaining - 1) / framesPerSub);
+                    const absoluteSongFrame = currentFrame - titleCardDurationFrames;
+                    const currentSub = Math.floor(absoluteSongFrame / framesPerSub);
+                    const lastSub = Math.floor((absoluteSongFrame - 1) / framesPerSub);
                     if (currentSub !== lastSub) {
                         const loopSub = currentSub % (song.bars * 8);
                         ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub, audioCtx, dest));
