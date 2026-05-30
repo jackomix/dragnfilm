@@ -794,7 +794,11 @@ function playAllAudio() {
 }
 function stopAllAudio() { activeAudioPlayers.forEach(p => { p.audio.pause(); p.source.disconnect(); }); activeAudioPlayers = []; }
 
-function togglePanel(panel) { state.ui.activePanel = (state.ui.activePanel === panel) ? null : panel; updatePanelVisibility(); }
+function togglePanel(panel) { 
+    if (state.ui.isPreviewPlaying) stopSongPreview();
+    state.ui.activePanel = (state.ui.activePanel === panel) ? null : panel; 
+    updatePanelVisibility(); 
+}
 function updatePanelVisibility() { 
     listPanel.classList.toggle('hidden', state.ui.activePanel !== 'list'); editorPanel.classList.toggle('hidden', state.ui.activePanel !== 'editor'); 
     filePanel.classList.toggle('hidden', state.ui.activePanel !== 'file'); moviePanel.classList.toggle('hidden', state.ui.activePanel !== 'movie'); 
@@ -974,6 +978,7 @@ function stopSongPreview() {
 }
 
 function openSongStudio(song) {
+    if (state.ui.isPreviewPlaying) stopSongPreview();
     state.ui.activeSongId = song.id;
     state.ui.activePanel = 'songEditor';
     updatePanelVisibility();
