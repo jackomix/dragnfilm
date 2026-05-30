@@ -31,7 +31,10 @@ const state = {
         stageMargin: 500, 
         isResetting: false,
         undoStack: [], redoStack: [],
-        editingSongId: null
+        activeSongId: null,
+        activeTrack: 'lead',
+        isPreviewPlaying: false,
+        previewFrame: 0
     },
     countdownTimer: null
 };
@@ -504,6 +507,16 @@ function bindEvents() {
     document.getElementById('movie-font-select').onchange = (e) => { state.project.fontStyle = e.target.value; saveProject(); };
     document.getElementById('movie-bg-color').oninput = (e) => { state.project.titleBgColor = e.target.value; saveProject(); };
     document.getElementById('movie-text-color').oninput = (e) => { state.project.titleTextColor = e.target.value; saveProject(); };
+    document.querySelectorAll('.inst-tab').forEach(btn => {
+        btn.onclick = () => {
+            state.ui.activeTrack = btn.dataset.track;
+            document.querySelectorAll('.inst-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderSongStudioGrid();
+        };
+    });
+    document.getElementById('studio-preview-play-btn').onclick = startSongPreview;
+    document.getElementById('studio-preview-stop-btn').onclick = stopSongPreview;
     updateBrush();
 }
 
@@ -743,9 +756,14 @@ function updatePanelVisibility() {
     listPanel.classList.toggle('hidden', state.ui.activePanel !== 'list'); editorPanel.classList.toggle('hidden', state.ui.activePanel !== 'editor'); 
     filePanel.classList.toggle('hidden', state.ui.activePanel !== 'file'); moviePanel.classList.toggle('hidden', state.ui.activePanel !== 'movie'); 
     musicPanel.classList.toggle('hidden', state.ui.activePanel !== 'soundtrack');
+    document.getElementById('song-editor-panel').classList.toggle('hidden', state.ui.activePanel !== 'songEditor');
 
     if (state.ui.activePanel === 'soundtrack') {
         renderSoundtrackPanel();
+    }
+    
+    if (state.ui.activePanel === 'songEditor') {
+        renderSongStudioGrid();
     }
 
     if (state.ui.activePanel === 'editor' && state.ui.editingTarget) {
@@ -879,9 +897,9 @@ function deleteSong(songId) {
 }
 
 function openSongStudio(song) {
-    state.ui.editingSongId = song.id;
-    const overlay = document.getElementById('song-studio-overlay');
-    overlay.classList.remove('hidden');
+    state.ui.activeSongId = song.id;
+    state.ui.activePanel = 'songEditor';
+    updatePanelVisibility();
     
     const nameInput = document.getElementById('studio-song-name');
     nameInput.value = song.name;
@@ -921,51 +939,11 @@ function openSongStudio(song) {
         saveProject(); 
     };
     
-    document.getElementById('studio-close-btn').onclick = closeSongStudio;
-    
-    const canvas = document.getElementById('studio-grid-canvas');
-    canvas.onclick = (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        const colCount = song.bars * 8;
-        const rowCount = 4 * 14;
-        const cellW = canvas.width / colCount;
-        const cellH = canvas.height / rowCount;
-        
-        const col = Math.floor(x / cellW);
-        const row = Math.floor(y / cellH);
-        
-        if (col >= 0 && col < colCount && row >= 0 && row < rowCount) {
-            const trackNames = ['lead', 'chords', 'bass', 'drums'];
-            const trackIndex = Math.floor(row / 14);
-            const degree = 13 - (row % 14); // 0 is bottom, 13 is top
-            const trackName = trackNames[trackIndex];
-            const track = song.tracks[trackName];
-            
-            if (track.notes[col] === degree) {
-                delete track.notes[col];
-            } else {
-                track.notes[col] = degree;
-            }
-            renderSongStudioGrid();
-            saveProject();
-        }
-    };
-    
-    window.addEventListener('resize', renderSongStudioGrid);
     renderSongStudioGrid();
 }
 
-function closeSongStudio() {
-    state.ui.editingSongId = null;
-    document.getElementById('song-studio-overlay').classList.add('hidden');
-    window.removeEventListener('resize', renderSongStudioGrid);
-}
-
 function renderSongStudioGrid() {
-    const songId = state.ui.editingSongId;
+    const songId = state.ui.activeSongId;
     if (!songId) return;
     const song = state.project.songs.find(s => s.id === songId);
     if (!song) return;
@@ -977,24 +955,24 @@ function renderSongStudioGrid() {
     
     const ctx = canvas.getContext('2d');
     const colCount = song.bars * 8;
-    const rowCount = 4 * 14;
+    const rowCount = 14;
     const cellW = canvas.width / colCount;
     const cellH = canvas.height / rowCount;
     
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     // Draw grid
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = '#eee';
     ctx.lineWidth = 1;
     
     for (let i = 0; i <= colCount; i++) {
         ctx.beginPath();
         ctx.moveTo(i * cellW, 0);
         ctx.lineTo(i * cellW, canvas.height);
-        if (i % 8 === 0) ctx.strokeStyle = '#666';
-        else if (i % 2 === 0) ctx.strokeStyle = '#444';
-        else ctx.strokeStyle = '#222';
+        if (i % 8 === 0) ctx.strokeStyle = '#ccc';
+        else if (i % 2 === 0) ctx.strokeStyle = '#ddd';
+        else ctx.strokeStyle = '#eee';
         ctx.stroke();
     }
     
@@ -1002,31 +980,31 @@ function renderSongStudioGrid() {
         ctx.beginPath();
         ctx.moveTo(0, i * cellH);
         ctx.lineTo(canvas.width, i * cellH);
-        if (i % 14 === 0) ctx.strokeStyle = '#888';
-        else ctx.strokeStyle = '#222';
+        ctx.strokeStyle = '#eee';
         ctx.stroke();
     }
     
-    // Draw notes
-    const trackNames = ['lead', 'chords', 'bass', 'drums'];
-    const trackColors = ['#00f', '#f0f', '#0f0', '#ff0'];
+    // Draw notes for active track
+    const trackColors = { lead: '#4a90e2', chords: '#d0021b', bass: '#7ed321', drums: '#f5a623' };
+    const track = song.tracks[state.ui.activeTrack];
+    ctx.fillStyle = trackColors[state.ui.activeTrack];
     
-    trackNames.forEach((name, ti) => {
-        const track = song.tracks[name];
-        ctx.fillStyle = trackColors[ti];
-        Object.entries(track.notes).forEach(([col, degree]) => {
+    Object.entries(track.notes).forEach(([col, degrees]) => {
+        if (!Array.isArray(degrees)) return;
+        degrees.forEach(degree => {
             const x = parseInt(col) * cellW;
-            const y = (ti * 14 + (13 - degree)) * cellH;
+            const y = (13 - degree) * cellH;
             ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
         });
     });
 
-    // Add track labels
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 12px Arial';
-    trackNames.forEach((name, ti) => {
-        ctx.fillText(name.toUpperCase(), 10, ti * 14 * cellH + 20);
-    });
+    // Playhead (if previewing)
+    if (state.ui.isPreviewPlaying) {
+        const framesPerSub = (60 * FPS) / (song.bpm * 2);
+        const currentSub = Math.floor(state.ui.previewFrame / framesPerSub) % (song.bars * 8);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillRect(currentSub * cellW, 0, cellW, canvas.height);
+    }
 }
 function updatePlayMovieButton() { document.getElementById('play-group').classList.add('can-theater'); }
 function updateMovieExportButtons() { const el = document.getElementById('movie-export-options'); if (el) el.classList.remove('hidden'); }

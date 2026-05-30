@@ -503,75 +503,50 @@ button:disabled {
     padding-bottom: 3px;
 }
 
-/* Song Studio Overlay */
-.overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0,0,0,0.8);
-    z-index: 2000;
+.song-editor-layout {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    gap: 0;
+    height: 100%;
 }
-
-.studio-container {
-    width: 90vw;
-    height: 90vh;
-    background: #222;
-    color: white;
+.instrument-sidebar {
+    width: 100px;
     display: flex;
     flex-direction: column;
-    border: 2px solid #444;
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    gap: 5px;
+    padding-right: 5px;
+    border-right: 1px solid #eee;
 }
-
-.studio-header {
-    padding: 15px;
-    background: #333;
-    border-bottom: 1px solid #444;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.inst-tab {
+    padding: 8px 5px;
+    font-size: 11px;
+    text-align: left;
+    background: #f8f8f8;
+    border: 1px solid #eee;
+    border-left: 4px solid var(--inst-color);
+    cursor: pointer;
+    border-radius: 2px;
 }
-
-.studio-controls {
-    display: flex;
-    gap: 15px;
-    align-items: center;
-    font-size: 14px;
+.inst-tab.active {
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-weight: bold;
 }
-
-.studio-controls input, .studio-controls select {
-    background: #444;
-    color: white;
-    border: 1px solid #666;
-    padding: 2px 5px;
-}
-
-.studio-grid-wrap {
+.piano-roll-wrap {
     flex: 1;
-    overflow: auto;
     position: relative;
-    background: #111;
+    overflow: hidden;
 }
-
 #studio-grid-canvas {
     display: block;
     cursor: crosshair;
 }
-
-#studio-close-btn {
-    padding: 5px 15px;
-    background: #c00;
-    color: white;
-    border: none;
+.preview-btn {
+    padding: 2px 5px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 3px;
     cursor: pointer;
-    font-weight: bold;
 }
+.preview-btn:hover { background: #e0e0e0; }
 
-#studio-close-btn:hover {
-    background: #f00;
-}
+/* Legacay Song Studio Overlay Removal (handled by replacing file content or specific deletions) */
