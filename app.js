@@ -517,6 +517,49 @@ function bindEvents() {
     });
     document.getElementById('studio-preview-play-btn').onclick = startSongPreview;
     document.getElementById('studio-preview-stop-btn').onclick = stopSongPreview;
+    const canvas = document.getElementById('studio-grid-canvas');
+    canvas.onclick = (e) => {
+        const songId = state.ui.activeSongId;
+        if (!songId) return;
+        const song = state.project.songs.find(s => s.id === songId);
+        if (!song) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const colCount = song.bars * 8;
+        const rowCount = 14;
+        const cellW = canvas.width / colCount;
+        const cellH = canvas.height / rowCount;
+        
+        const col = Math.floor(x / cellW);
+        const row = Math.floor(y / cellH);
+        
+        if (col >= 0 && col < colCount && row >= 0 && row < rowCount) {
+            const degree = 13 - row;
+            const track = song.tracks[state.ui.activeTrack];
+            if (!track.notes[col]) track.notes[col] = [];
+            
+            const idx = track.notes[col].indexOf(degree);
+            if (idx === -1) {
+                track.notes[col].push(degree);
+                // Preview note
+                if (state.ui.activeTrack === 'drums') {
+                    playDrum(degree);
+                } else {
+                    const octaveOffset = state.ui.activeTrack === 'bass' ? -2 : (state.ui.activeTrack === 'lead' ? 1 : 0);
+                    const freq = getFrequencyForDegree(degree, song.key, song.scale, octaveOffset);
+                    playSynth(freq, track.instrument, state.ui.activeTrack === 'chords');
+                }
+            } else {
+                track.notes[col].splice(idx, 1);
+                if (track.notes[col].length === 0) delete track.notes[col];
+            }
+            renderSongStudioGrid();
+            saveProject();
+        }
+    };
     updateBrush();
 }
 
