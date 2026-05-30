@@ -1,11 +1,11 @@
-# Music System Redesign Spec
+# Music System Redesign Spec v2
 
-**Goal:** Replace the legacy "musician" recording system with a centralized, bar-based "Song Studio" for composing music using a scale-degree piano roll.
+**Goal:** Implement a centralized, bar-based "Song Editor" panel with polyphonic support and a tabbed "DAW-style" interface.
 
 ## 1. Architecture & Data Model
 
 ### Global Song Library
-The project state will host a `songs` array. Each song is a structured object.
+The project state will host a `songs` array. Each song is polyphonic.
 
 ```javascript
 state.project.songs = [
@@ -17,7 +17,7 @@ state.project.songs = [
         scale: "major",
         bars: 4,
         tracks: {
-            lead: { instrument: "piano", notes: {} },   // notes: { "0": 7, "2": 5 } where key is subdivision index, value is degree
+            lead: { instrument: "piano", notes: {} },   // notes: { "0": [7], "2": [5, 7] } - arrays for polyphony
             chords: { instrument: "synth", notes: {} },
             bass: { instrument: "synth", notes: {} },
             drums: { instrument: "drum", notes: {} }
@@ -26,45 +26,53 @@ state.project.songs = [
 ];
 ```
 
-### Scene Association
-Scenes will now reference a song by ID instead of holding their own recordings.
+### UI State
 ```javascript
-state.project.scenes[i].songId = "song_123";
+state.ui.activeSongId = null; // Song being edited
+state.ui.activeTrack = 'lead'; // 'lead', 'chords', 'bass', 'drums'
+state.ui.isPreviewPlaying = false;
+state.ui.previewFrame = 0;
 ```
 
 ## 2. UI Components
 
 ### Soundtrack Panel
-Replaces the existing "Music" panel.
-- **Scene List:** Shows all scenes with a dropdown to select a Song ID or "None".
-- **Song List:** Shows all created songs with "Edit" and "Delete" buttons.
-- **Add Song:** Button to create a new song.
+- **Two-Column Layout:**
+    - **Left Column (Library):** Manage songs (Add, Edit, Delete).
+    - **Right Column (Scenes):** Assign songs to scenes via dropdowns.
+- **Styling:** White background, consistent with the app's theme.
 
-### Song Studio (Overlay)
-A large (90% width/height) overlay for editing a single song.
-- **Header:** Editable name, BPM, Key, Scale, and Bar Length.
-- **Piano Roll Grid:**
-    - 4 rows (one per track).
-    - Horizontal: Divided into Bars -> Beats -> 8th notes.
-    - Vertical: 14 scale degrees (2 octaves).
-    - Responsive: The grid stretches/compresses to fit the screen width.
-- **Interaction:** Click a cell to set the note for that 8th-note slot. Click again to clear. (Monophonic per track).
+### Song Editor Panel
+- **Layout:** "DAW-style" sidebar-main interface.
+- **Sidebar (Left):** 4 instrument tabs:
+    - 🎸 **Lead** (Blue)
+    - 🎹 **Chords** (Magenta)
+    - 🎸 **Bass** (Green)
+    - 🥁 **Drums** (Yellow)
+- **Main Area:** Piano roll grid for the *selected* instrument only.
+- **Header:**
+    - Editable Name, BPM, Key, Scale, Bars.
+    - Preview Controls: `[▶️]` and `[⏹️]` buttons.
+- **Responsive Grid:** Stretches/compresses to fit the screen width.
 
-## 3. Audio Engine
+## 3. Interactions & Feedback
 
-### Scale Degree Logic
-Notes are calculated based on the selected Key and Scale.
-- **Lead/Bass:** Plays the specific frequency for the degree.
-- **Chords:** Plays a triad (or appropriate chord) based on the degree.
-- **Drums:** Maps degrees to specific percussion sounds (Kick, Snare, etc.).
+### Note Editing
+- **Toggle:** Click to add/remove a degree from the array at that 8th-note slot.
+- **Audio Feedback:** Play the frequency of the degree immediately upon placement.
+- **Polyphony:** Multiple notes can exist at the same horizontal position.
 
-### Seamless Playback
-- Playback timing is global.
-- If `scene[i].songId === scene[i+1].songId`, the audio context timing continues uninterrupted.
-- If the song changes, the previous audio is stopped and the new one starts from the beginning of its loop.
+### Song Preview
+- Independent loop playhead.
+- Does not trigger animation frames; only triggers `triggerSongNote` using its own `previewFrame` counter.
 
-## 4. Implementation Phases
-1. **Data Migration:** Update state structure and clear legacy musician data.
-2. **Soundtrack UI:** Build the panel and scene association logic.
-3. **Song Studio UI:** Build the responsive grid and note editing.
-4. **Playback Integration:** Update the `renderLoop` and audio triggers to use the new song model.
+## 4. Audio Engine
+- **triggerSongNote:** Updated to loop through the array of degrees at a given slot.
+- **getFrequencyForDegree:** (Same as v1).
+
+## 5. Implementation Phases
+1. **Refactor Data Model:** Transition `notes: {}` from values to arrays.
+2. **Soundtrack Panel Layout:** Implement the two-column management view.
+3. **Song Editor Panel UI:** Build the tabbed panel and sidebar.
+4. **Polyphonic Grid:** Update the canvas rendering and click logic for arrays.
+5. **Independent Preview:** Implement the preview loop and controls.
