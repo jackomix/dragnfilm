@@ -961,6 +961,8 @@ function deleteSong(songId) {
     });
     renderSoundtrackPanel();
     saveProject();
+}
+
 function startSongPreview() {
     if (state.ui.isPreviewPlaying) return;
     const songId = state.ui.activeSongId;
@@ -1350,7 +1352,8 @@ async function exportMovie(fullMovie, format) {
     const totalFrames = durations.reduce((a, b) => a + b, 0) + titleCardDurationFrames;
     togglePlayback(true, fullMovie);
     if (format === 'video') {
-        const stream = expCanvas.captureStream(FPS), audioCtx = new AudioContext(), dest = audioCtx.createMediaStreamDestination();
+        const stream = expCanvas.captureStream(FPS), audioCtx = new (window.AudioContext || window.webkitAudioContext)(), dest = audioCtx.createMediaStreamDestination();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         const exportPlayers = [];
         let frameOffset = titleCardDurationFrames;
         scenesToExport.forEach((scene, si) => {
