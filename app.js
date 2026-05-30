@@ -644,16 +644,18 @@ function getFrequencyForDegree(degree, key, scale, octaveOffset) {
 }
 
 function triggerSongNote(song, trackName, subdivisionIndex, ctx = null, dest = null) {
-    const degree = song.tracks[trackName].notes[subdivisionIndex];
-    if (degree === undefined) return;
+    const degrees = song.tracks[trackName].notes[subdivisionIndex];
+    if (!degrees || !Array.isArray(degrees)) return;
     
-    if (trackName === 'drums') {
-        playDrum(degree, ctx, dest);
-    } else {
-        const octaveOffset = trackName === 'bass' ? -2 : (trackName === 'lead' ? 1 : 0);
-        const freq = getFrequencyForDegree(degree, song.key, song.scale, octaveOffset);
-        playSynth(freq, song.tracks[trackName].instrument, trackName === 'chords', ctx, dest);
-    }
+    degrees.forEach(degree => {
+        if (trackName === 'drums') {
+            playDrum(degree, ctx, dest);
+        } else {
+            const octaveOffset = trackName === 'bass' ? -2 : (trackName === 'lead' ? 1 : 0);
+            const freq = getFrequencyForDegree(degree, song.key, song.scale, octaveOffset);
+            playSynth(freq, song.tracks[trackName].instrument, trackName === 'chords', ctx, dest);
+        }
+    });
 }
 
 function playSynth(freq, instrumentName, isChord, ctx = null, dest = null) {
@@ -1155,7 +1157,21 @@ async function loadProject() {
     state.project.titleBgColor = p.titleBgColor || "#ffffff"; 
     state.project.titleTextColor = p.titleTextColor || "#000000"; 
     state.project.showTitleCard = p.showTitleCard !== undefined ? p.showTitleCard : true; 
-    state.project.songs = p.songs || [];
+    state.project.songs = (p.songs || []).map(song => {
+        if (song.tracks) {
+            for (const trackName in song.tracks) {
+                const track = song.tracks[trackName];
+                if (track.notes) {
+                    for (const col in track.notes) {
+                        if (track.notes[col] !== undefined && !Array.isArray(track.notes[col])) {
+                            track.notes[col] = [track.notes[col]];
+                        }
+                    }
+                }
+            }
+        }
+        return song;
+    });
     state.project.scenes = await Promise.all(p.scenes.map(async s => ({ 
         name: s.name, 
         songId: s.songId || null,
