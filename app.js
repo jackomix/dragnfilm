@@ -34,7 +34,9 @@ const state = {
         activeSongId: null,
         activeTrack: 'lead',
         isPreviewPlaying: false,
-        previewFrame: 0
+        previewFrame: 0,
+        lastPreviewTime: 0,
+        previewAccumulator: 0
     },
     countdownTimer: null
 };
@@ -180,7 +182,7 @@ function renderLoop() {
                     const framesPerSub = (60 * FPS) / (song.bpm * 2); 
                     const songFrame = state.ui.currentFrame + state.ui.songFrameOffset;
                     const currentSub = Math.floor(songFrame / framesPerSub);
-                    const lastSub = Math.floor((songFrame - 1) / framesPerSub);
+                    const lastSub = state.ui.currentFrame === 0 ? -1 : Math.floor((songFrame - 1) / framesPerSub);
                     
                     if (currentSub !== lastSub) {
                         const loopSub = currentSub % (song.bars * 8);
@@ -430,7 +432,12 @@ const keyFrequencies = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A
 function onKeyDown(e) {
     if (e.code === 'Space') {
         if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
-        e.preventDefault(); if (state.ui.isRecording) stopRecording(); else togglePlayback(false, false); return;
+        e.preventDefault(); 
+        if (state.ui.activePanel === 'songEditor') {
+            toggleSongPreview();
+            return;
+        }
+        if (state.ui.isRecording) stopRecording(); else togglePlayback(false, false); return;
     }
     const mod = e.ctrlKey || e.metaKey, scene = getCurrentScene();
     if (!scene) return;
@@ -657,7 +664,7 @@ async function startRecording(t) {
     state.ui.isRecording = true; document.getElementById('record-btn').textContent = '⏹️'; 
     const newRec = { frames: [], audio: null }; 
     t.recordings.push(newRec); 
-    state.ui.currentFrame = 0;
+    state.ui.currentFrame = -1;
     state.ui.lastFrameTime = performance.now();
     state.ui.timeAccumulator = 0;
     newRec.frames[0] = { x: t.x, y: t.y, costumeIndex: t.currentCostume }; 
@@ -684,7 +691,7 @@ function togglePlayback(asTheater, startFromBeginning) {
         if (startFromBeginning) { state.project.currentSceneIndex = 0; if (asTheater) state.ui.isTitleCardActive = true; }
         state.ui.isPlaying = true; state.ui.selectedActorId = null;
         document.getElementById('play-btn').textContent = '⏹️'; document.getElementById('play-group').classList.add('is-playing');
-        state.ui.currentFrame = 0;
+        state.ui.currentFrame = -1;
         state.ui.songFrameOffset = 0;
         state.ui.lastFrameTime = performance.now();
         state.ui.timeAccumulator = 0;
@@ -963,7 +970,6 @@ function deleteSong(songId) {
     saveProject();
 }
 
-let previewLoopInterval = null;
 function startSongPreview() {
     if (state.ui.isPreviewPlaying) return;
     const songId = state.ui.activeSongId;
@@ -972,29 +978,47 @@ function startSongPreview() {
     if (!song) return;
 
     state.ui.isPreviewPlaying = true;
-    state.ui.previewFrame = 0;
-    
-    previewLoopInterval = setInterval(() => {
-        if (!state.ui.isPreviewPlaying) { clearInterval(previewLoopInterval); return; }
-        
-        const framesPerSub = (60 * FPS) / (song.bpm * 2);
-        const currentSub = Math.floor(state.ui.previewFrame / framesPerSub);
-        const lastSub = Math.floor((state.ui.previewFrame - 1) / framesPerSub);
-        
-        if (currentSub !== lastSub) {
-            const loopSub = currentSub % (song.bars * 8);
-            ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
-            renderSongStudioGrid();
+    state.ui.previewFrame = -1;
+    state.ui.lastPreviewTime = performance.now();
+    state.ui.previewAccumulator = 0;
+
+    function previewLoop() {
+        if (!state.ui.isPreviewPlaying) return;
+
+        const now = performance.now();
+        let deltaTime = now - state.ui.lastPreviewTime;
+        if (deltaTime > 500) deltaTime = 500;
+        state.ui.previewAccumulator += deltaTime;
+        state.ui.lastPreviewTime = now;
+
+        while (state.ui.previewAccumulator >= FRAME_DURATION) {
+            state.ui.previewFrame++;
+            state.ui.previewAccumulator -= FRAME_DURATION;
+
+            const framesPerSub = (60 * FPS) / (song.bpm * 2);
+            const currentSub = Math.floor(state.ui.previewFrame / framesPerSub);
+            const lastSub = state.ui.previewFrame === 0 ? -1 : Math.floor((state.ui.previewFrame - 1) / framesPerSub);
+
+            if (currentSub !== lastSub) {
+                const loopSub = currentSub % (song.bars * 8);
+                ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
+                renderSongStudioGrid();
+            }
         }
-        state.ui.previewFrame++;
-    }, 1000/60);
+        requestAnimationFrame(previewLoop);
+    }
+    requestAnimationFrame(previewLoop);
 }
 
 function stopSongPreview() {
     state.ui.isPreviewPlaying = false;
-    if (previewLoopInterval) clearInterval(previewLoopInterval);
     state.ui.previewFrame = 0;
     renderSongStudioGrid();
+}
+
+function toggleSongPreview() {
+    if (state.ui.isPreviewPlaying) stopSongPreview();
+    else startSongPreview();
 }
 
 function openSongStudio(song) {
