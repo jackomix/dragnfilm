@@ -1228,9 +1228,79 @@ function createListItem(t, canDel, index) {
 
 function openEditor(t) { state.ui.editingTarget = t; state.ui.editingCostumeIndex = t.currentCostume; state.ui.undoStack = []; state.ui.redoStack = []; updateUndoRedoButtons(); state.ui.activePanel = 'editor'; updatePanelVisibility(); renderCostumeList(); state.ui.currentTool = 'pencil'; document.querySelectorAll('.main-tools button[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === 'pencil')); loadCostumeToEditor(t.costumes[state.ui.editingCostumeIndex]); }
 
-async function enterCameraMode() {}
+async function enterCameraMode() {
+    const ctx = editorCanvas.getContext('2d');
+    state.ui.cameraBackup = ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height);
+    
+    try {
+        state.ui.cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        state.ui.cameraMode = true;
+        
+        document.querySelector('.main-tools').classList.add('hidden');
+        document.getElementById('camera-tools').classList.remove('hidden');
+        
+        const video = document.createElement('video');
+        video.srcObject = state.ui.cameraStream;
+        video.play();
+        
+        cameraPreviewLoop(video);
+    } catch (err) {
+        alert("Camera access denied or unavailable.");
+        exitCameraMode(false);
+    }
+}
+
+function cameraPreviewLoop(video) {
+    if (!state.ui.cameraMode) return;
+    
+    const ctx = editorCanvas.getContext('2d');
+    const cw = editorCanvas.width;
+    const ch = editorCanvas.height;
+    
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (vw > 0 && vh > 0) {
+        const videoRatio = vw / vh;
+        const canvasRatio = cw / ch;
+        let sx, sy, sw, sh;
+        
+        if (videoRatio > canvasRatio) {
+            sw = vh * canvasRatio;
+            sh = vh;
+            sx = (vw - sw) / 2;
+            sy = 0;
+        } else {
+            sw = vw;
+            sh = vw / canvasRatio;
+            sx = 0;
+            sy = (vh - sh) / 2;
+        }
+        
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
+    }
+    
+    requestAnimationFrame(() => cameraPreviewLoop(video));
+}
+
 function capturePhoto() {}
-function exitCameraMode(restoreBackup) {}
+
+function exitCameraMode(restoreBackup) {
+    if (state.ui.cameraStream) {
+        state.ui.cameraStream.getTracks().forEach(track => track.stop());
+        state.ui.cameraStream = null;
+    }
+    
+    state.ui.cameraMode = false;
+    
+    if (restoreBackup && state.ui.cameraBackup) {
+        const ctx = editorCanvas.getContext('2d');
+        ctx.putImageData(state.ui.cameraBackup, 0, 0);
+    }
+    
+    state.ui.cameraBackup = null;
+    document.querySelector('.main-tools').classList.remove('hidden');
+    document.getElementById('camera-tools').classList.add('hidden');
+}
 
 function renderCostumeList() {
     costumeList.innerHTML = ''; const t = state.ui.editingTarget; t.costumes.forEach((c, i) => {
