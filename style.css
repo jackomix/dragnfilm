@@ -167,16 +167,18 @@ canvas {
 }
 
 .file-section {
-    margin-bottom: 10px;
-    padding-bottom: 5px;
     border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
 }
 
 .file-section:last-child {
     border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
 }
 
-.file-section h3 {
+h3 {
     margin: 0 0 5px 0;
     font-size: 12px;
     font-weight: bold;
@@ -492,7 +494,6 @@ button:disabled {
     display: flex;
     gap: 15px;
     height: 100%;
-    padding-top: 10px;
 }
 .library-col, .scenes-col {
     flex: 1;
@@ -503,24 +504,13 @@ button:disabled {
     width: 500px;
 }
 
-.library-col h3, .scenes-col h3 {
-    font-size: 13px;
-    margin-top: 0;
-    margin-bottom: 8px;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 4px;
-    color: #444;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
 #add-song-btn {
     margin-top: 5px;
     margin-bottom: 0;
 }
 
 #song-editor-panel {
-    width: 600px;
+    width: 800px;
     max-height: 400px;
 }
 
@@ -529,16 +519,6 @@ button:disabled {
     align-items: center;
     width: 100%;
     padding: 0;
-}
-
-#studio-song-name {
-    font-weight: bold;
-    background: transparent;
-    border: none;
-    width: 250px;
-    font-size: 18px;
-    outline: none;
-    color: #000;
 }
 
 .song-editor-controls {
@@ -569,7 +549,7 @@ button:disabled {
 }
 
 .instrument-sidebar {
-    width: 140px;
+    width: 100px;
     display: flex;
     flex-direction: column;
     gap: 0;

@@ -164,6 +164,9 @@ function renderLoop() {
         state.ui.lastFrameTime = now;
 
         const steps = Math.floor(state.ui.timeAccumulator / FRAME_DURATION);
+        if (state.ui.isExporting && steps > 0) {
+            console.log(`[RL-CLOCK] now=${now.toFixed(0)} frame=${state.ui.currentFrame} steps=${steps} accum=${state.ui.timeAccumulator.toFixed(1)}`);
+        }
         let currentStep = 0;
 
         const startPositions = new Map();
@@ -178,27 +181,33 @@ function renderLoop() {
         }
 
         while (state.ui.timeAccumulator >= FRAME_DURATION) {
-            state.ui.currentFrame++;
-            state.ui.timeAccumulator -= FRAME_DURATION;
             currentStep++;
-            
+
+            if (state.ui.isExporting) {
+                 console.log(`[RL-STEP] tick! currFrame=${state.ui.currentFrame} isTC=${state.ui.isTitleCardActive}`);
+            }
+
             const titleCardDurationFrames = state.project.showTitleCard ? 120 : 0;
             if (state.ui.isTheaterMode && state.ui.isTitleCardActive && state.project.showTitleCard) {
                 if (state.ui.currentFrame >= titleCardDurationFrames) {
+                    console.log(`[RL-TC] Title card duration met. frame=${state.ui.currentFrame}. transition to simulation.`);
                     state.ui.isTitleCardActive = false;
-                    state.ui.currentFrame = -1;
+                    state.ui.currentFrame = 0;
                     playAllAudio();
                 }
-            } else if (!state.ui.isTitleCardActive) {
+            }
+
+            if (!state.ui.isTitleCardActive) {
                 const song = scene.songId ? state.project.songs.find(s => s.id === scene.songId) : null;
                 if (song) {
                     const framesPerSub = (60 * FPS) / (song.bpm * 2); 
                     const songFrame = state.ui.currentFrame + state.ui.songFrameOffset;
                     const currentSub = Math.floor(songFrame / framesPerSub);
                     const lastSub = state.ui.currentFrame === 0 ? -1 : Math.floor((songFrame - 1) / framesPerSub);
-                    
+
                     if (currentSub !== lastSub) {
                         const loopSub = currentSub % (song.bars * 8);
+                        if (state.ui.isExporting) console.log(`[MUSIC] Triggering notes for sub=${loopSub} (frame=${state.ui.currentFrame})`);
                         ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
                     }
                 }
@@ -224,14 +233,16 @@ function renderLoop() {
                         }
                     }
                 });
-                
+
                 if (state.ui.selectedActorId === 'backdrop') {
                     const rec = scene.backdrop.recordings[scene.backdrop.recordings.length - 1];
                     rec.frames[state.ui.currentFrame] = { x: 0, y: 0, costumeIndex: scene.backdrop.currentCostume };
                 }
             }
-        }
-    } else {
+
+            state.ui.currentFrame++;
+            state.ui.timeAccumulator -= FRAME_DURATION;
+        }    } else {
         state.ui.lastFrameTime = now;
         state.ui.timeAccumulator = 0;
     }
@@ -683,7 +694,7 @@ async function startRecording(t) {
     state.ui.isRecording = true; document.getElementById('record-btn').textContent = '⏹️'; 
     const newRec = { frames: [], audio: null }; 
     t.recordings.push(newRec); 
-    state.ui.currentFrame = -1;
+    state.ui.currentFrame = 0;
     state.ui.lastFrameTime = performance.now();
     state.ui.timeAccumulator = 0;
     newRec.frames[0] = { x: t.x, y: t.y, costumeIndex: t.currentCostume }; 
@@ -719,7 +730,7 @@ function togglePlayback(asTheater, startFromBeginning) {
         if (startFromBeginning) { state.project.currentSceneIndex = 0; if (asTheater) state.ui.isTitleCardActive = true; }
         state.ui.isPlaying = true; state.ui.selectedActorId = null;
         document.getElementById('play-btn').textContent = '⏹️'; document.getElementById('play-group').classList.add('is-playing');
-        state.ui.currentFrame = -1;
+        state.ui.currentFrame = 0;
         state.ui.songFrameOffset = 0;
         state.ui.lastFrameTime = performance.now();
         state.ui.timeAccumulator = 0;
@@ -1000,7 +1011,7 @@ function startSongPreview() {
     if (!song) return;
 
     state.ui.isPreviewPlaying = true;
-    state.ui.previewFrame = -1;
+    state.ui.previewFrame = 0;
     state.ui.lastPreviewTime = performance.now();
     state.ui.previewAccumulator = 0;
     document.getElementById('studio-preview-toggle-btn').textContent = '⏹️';
@@ -1015,9 +1026,6 @@ function startSongPreview() {
         state.ui.lastPreviewTime = now;
 
         while (state.ui.previewAccumulator >= FRAME_DURATION) {
-            state.ui.previewFrame++;
-            state.ui.previewAccumulator -= FRAME_DURATION;
-
             const framesPerSub = (60 * FPS) / (song.bpm * 2);
             const currentSub = Math.floor(state.ui.previewFrame / framesPerSub);
             const lastSub = state.ui.previewFrame === 0 ? -1 : Math.floor((state.ui.previewFrame - 1) / framesPerSub);
@@ -1027,6 +1035,9 @@ function startSongPreview() {
                 ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
                 renderSongStudioGrid();
             }
+
+            state.ui.previewFrame++;
+            state.ui.previewAccumulator -= FRAME_DURATION;
         }
         requestAnimationFrame(previewLoop);
     }
@@ -1391,6 +1402,14 @@ async function exportMovie(fullMovie, format) {
         if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
         if (audioContext.state === 'suspended') audioContext.resume();
         state.ui.exportDest = audioContext.createMediaStreamDestination();
+        
+        // AUDIO STARVATION FIX: Inject continuous silence so MediaRecorder doesn't stall waiting for playAllAudio()
+        const silentOsc = audioContext.createOscillator();
+        const silentGain = audioContext.createGain();
+        silentGain.gain.value = 0; // Pure silence
+        silentOsc.connect(silentGain);
+        silentGain.connect(state.ui.exportDest);
+        silentOsc.start();
         
         const recorder = new MediaRecorder(new MediaStream([...stream.getVideoTracks(), ...state.ui.exportDest.stream.getAudioTracks()]), { mimeType: 'video/webm' });
         const chunks = [];
