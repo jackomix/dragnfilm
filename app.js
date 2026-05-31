@@ -1290,15 +1290,16 @@ function capturePhoto() {
     
     let count = 3;
     overlay.textContent = count;
-    
-    const interval = setInterval(() => {
+
+    state.countdownTimer = setInterval(() => {
         count--;
         if (count > 0) {
             overlay.textContent = count;
         } else {
-            clearInterval(interval);
+            clearInterval(state.countdownTimer);
+            state.countdownTimer = null;
             overlay.classList.add('hidden');
-            
+
             // Finalize capture
             commitUndo(state.ui.cameraBackup);
             state.ui.cameraBackup = null; // Prevent restore in exitCameraMode
@@ -1312,6 +1313,12 @@ function capturePhoto() {
 }
 
 function exitCameraMode(restoreBackup) {
+    if (state.countdownTimer) {
+        clearInterval(state.countdownTimer);
+        state.countdownTimer = null;
+        document.getElementById('countdown-overlay').classList.add('hidden');
+    }
+
     if (state.ui.cameraStream) {
         state.ui.cameraStream.getTracks().forEach(track => track.stop());
         state.ui.cameraStream = null;
