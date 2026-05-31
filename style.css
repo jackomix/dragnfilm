@@ -520,14 +520,8 @@ button:disabled {
 }
 
 #song-editor-panel {
-    width: 96%;
-    height: 90%;
-    top: 2%;
-    left: 2%;
-    display: flex;
-    flex-direction: column;
-    position: fixed; /* Ensure it stays in place */
-    z-index: 1000;
+    width: 600px;
+    max-height: 400px;
 }
 
 .song-editor-header {
