@@ -25,7 +25,6 @@ const state = {
         exportCanvas: null,
         exportCtx: null,
         exportFullMovie: true,
-        tcBuffer: null,
         lineDashOffset: 0,
         lastBoilUpdate: 0,
         movieStartSceneIndex: 0,
@@ -159,91 +158,76 @@ function renderLoop() {
     const isPlayingOrRecording = state.ui.isPlaying || state.ui.isRecording;
 
     if (isPlayingOrRecording) {
-        if (state.ui.isExporting) {
-            // Frame-locked logic for export: exactly one frame per call
+        let deltaTime = now - state.ui.lastFrameTime;
+        if (deltaTime > 500) deltaTime = 500;
+        state.ui.timeAccumulator += deltaTime;
+        state.ui.lastFrameTime = now;
+
+        const steps = Math.floor(state.ui.timeAccumulator / FRAME_DURATION);
+        let currentStep = 0;
+
+        const startPositions = new Map();
+        if (state.ui.isRecording && steps > 0) {
+            scene.actors.forEach(actor => {
+                const rec = actor.recordings[actor.recordings.length - 1];
+                if (rec && rec.frames) {
+                    const prev = rec.frames[state.ui.currentFrame];
+                    if (prev) startPositions.set(actor.id, { x: prev.x, y: prev.y });
+                }
+            });
+        }
+
+        while (state.ui.timeAccumulator >= FRAME_DURATION) {
             state.ui.currentFrame++;
-            state.ui.lastFrameTime = now;
-            state.ui.timeAccumulator = 0;
+            state.ui.timeAccumulator -= FRAME_DURATION;
+            currentStep++;
             
-            if (!state.ui.isTitleCardActive) {
+            const titleCardDurationFrames = state.project.showTitleCard ? 120 : 0;
+            if (state.ui.isTheaterMode && state.ui.isTitleCardActive && state.project.showTitleCard) {
+                if (state.ui.currentFrame >= titleCardDurationFrames) {
+                    state.ui.isTitleCardActive = false;
+                    state.ui.currentFrame = -1;
+                    playAllAudio();
+                }
+            } else if (!state.ui.isTitleCardActive) {
                 const song = scene.songId ? state.project.songs.find(s => s.id === scene.songId) : null;
                 if (song) {
                     const framesPerSub = (60 * FPS) / (song.bpm * 2); 
                     const songFrame = state.ui.currentFrame + state.ui.songFrameOffset;
                     const currentSub = Math.floor(songFrame / framesPerSub);
                     const lastSub = state.ui.currentFrame === 0 ? -1 : Math.floor((songFrame - 1) / framesPerSub);
+                    
                     if (currentSub !== lastSub) {
                         const loopSub = currentSub % (song.bars * 8);
                         ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
                     }
                 }
             }
-        } else {
-            // Standard real-time logic for playback/recording
-            let deltaTime = now - state.ui.lastFrameTime;
-            if (deltaTime > 500) deltaTime = 500;
-            state.ui.timeAccumulator += deltaTime;
-            state.ui.lastFrameTime = now;
 
-            const steps = Math.floor(state.ui.timeAccumulator / FRAME_DURATION);
-            let currentStep = 0;
-
-            const startPositions = new Map();
-            if (state.ui.isRecording && steps > 0) {
+            if (state.ui.isRecording) {
+                const t = currentStep / (steps || 1);
                 scene.actors.forEach(actor => {
-                    const rec = actor.recordings[actor.recordings.length - 1];
-                    if (rec && rec.frames) {
-                        const prev = rec.frames[state.ui.currentFrame];
-                        if (prev) startPositions.set(actor.id, { x: prev.x, y: prev.y });
+                    const isSelected = state.ui.selectedActorId === actor.id;
+                    const isHoverRec = state.ui.dragMode === 'hover' && isSelected;
+                    const isDragRec = draggedActor && draggedActor.id === actor.id;
+                    if (isHoverRec || isDragRec) {
+                        const rec = actor.recordings[actor.recordings.length - 1];
+                        const start = startPositions.get(actor.id);
+                        if (start) {
+                            rec.frames[state.ui.currentFrame] = {
+                                x: start.x + (actor.x - start.x) * t,
+                                y: start.y + (actor.y - start.y) * t,
+                                costumeIndex: actor.currentCostume
+                            };
+                        } else {
+                            rec.frames[state.ui.currentFrame] = { x: actor.x, y: actor.y, costumeIndex: actor.currentCostume };
+                        }
                     }
                 });
-            }
-
-            while (state.ui.timeAccumulator >= FRAME_DURATION) {
-                state.ui.currentFrame++;
-                state.ui.timeAccumulator -= FRAME_DURATION;
-                currentStep++;
                 
-                if (!state.ui.isTitleCardActive) {
-                    const song = scene.songId ? state.project.songs.find(s => s.id === scene.songId) : null;
-                    if (song) {
-                        const framesPerSub = (60 * FPS) / (song.bpm * 2); 
-                        const songFrame = state.ui.currentFrame + state.ui.songFrameOffset;
-                        const currentSub = Math.floor(songFrame / framesPerSub);
-                        const lastSub = state.ui.currentFrame === 0 ? -1 : Math.floor((songFrame - 1) / framesPerSub);
-                        
-                        if (currentSub !== lastSub) {
-                            const loopSub = currentSub % (song.bars * 8);
-                            ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
-                        }
-                    }
-                }
-
-                if (state.ui.isRecording) {
-                    const t = currentStep / (steps || 1);
-                    scene.actors.forEach(actor => {
-                        const isSelected = state.ui.selectedActorId === actor.id;
-                        const isHoverRec = state.ui.dragMode === 'hover' && isSelected;
-                        const isDragRec = draggedActor && draggedActor.id === actor.id;
-                        if (isHoverRec || isDragRec) {
-                            const rec = actor.recordings[actor.recordings.length - 1];
-                            const start = startPositions.get(actor.id);
-                            if (start) {
-                                rec.frames[state.ui.currentFrame] = {
-                                    x: start.x + (actor.x - start.x) * t,
-                                    y: start.y + (actor.y - start.y) * t,
-                                    costumeIndex: actor.currentCostume
-                                };
-                            } else {
-                                rec.frames[state.ui.currentFrame] = { x: actor.x, y: actor.y, costumeIndex: actor.currentCostume };
-                            }
-                        }
-                    });
-                    
-                    if (state.ui.selectedActorId === 'backdrop') {
-                        const rec = scene.backdrop.recordings[scene.backdrop.recordings.length - 1];
-                        rec.frames[state.ui.currentFrame] = { x: 0, y: 0, costumeIndex: scene.backdrop.currentCostume };
-                    }
+                if (state.ui.selectedActorId === 'backdrop') {
+                    const rec = scene.backdrop.recordings[scene.backdrop.recordings.length - 1];
+                    rec.frames[state.ui.currentFrame] = { x: 0, y: 0, costumeIndex: scene.backdrop.currentCostume };
                 }
             }
         }
@@ -258,30 +242,17 @@ function renderLoop() {
     updateProgressBarUI(state.ui.currentFrame, maxFrames);
 
     if (state.ui.isTheaterMode && state.ui.isTitleCardActive && state.project.showTitleCard) {
-        if (state.ui.currentFrame < titleCardDurationFrames) {
-            drawTitleCard(ctx, margin);
-            if (state.ui.isExporting && state.ui.exportCtx) {
-                const expCtx = state.ui.exportCtx;
-                if (!state.ui.tcBuffer) {
-                    state.ui.tcBuffer = document.createElement('canvas');
-                    state.ui.tcBuffer.width = state.project.width;
-                    state.ui.tcBuffer.height = state.project.height;
-                }
-                const tcBufCtx = state.ui.tcBuffer.getContext('2d');
-                tcBufCtx.imageSmoothingEnabled = false;
-                drawTitleCard(tcBufCtx, 0);
-                expCtx.imageSmoothingEnabled = false;
-                expCtx.drawImage(state.ui.tcBuffer, 0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
-            }
-            requestAnimationFrame(renderLoop);
-            return;
-        } else {
-            state.ui.isTitleCardActive = false;
-            state.ui.tcBuffer = null;
-            state.ui.currentFrame = -1;
-            state.ui.lastFrameTime = performance.now();
-            playAllAudio();
+        drawTitleCard(ctx, margin);
+        if (state.ui.isExporting && state.ui.exportCtx) {
+            const expCtx = state.ui.exportCtx;
+            const tcBuf = document.createElement('canvas'); tcBuf.width = state.project.width; tcBuf.height = state.project.height;
+            const tcBufCtx = tcBuf.getContext('2d'); tcBufCtx.imageSmoothingEnabled = false;
+            drawTitleCard(tcBufCtx, 0);
+            expCtx.imageSmoothingEnabled = false;
+            expCtx.drawImage(tcBuf, 0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
         }
+        requestAnimationFrame(renderLoop);
+        return;
     }
     
     if (!state.ui.isTheaterMode) {
