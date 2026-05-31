@@ -42,7 +42,10 @@ const state = {
         isPreviewPlaying: false,
         previewFrame: 0,
         lastPreviewTime: 0,
-        previewAccumulator: 0
+        previewAccumulator: 0,
+        cameraMode: false,
+        cameraStream: null,
+        cameraBackup: null
     },
     countdownTimer: null
 };
@@ -531,6 +534,9 @@ function bindEvents() {
     document.getElementById('paste-btn').onclick = pasteCanvas;
     document.getElementById('costume-copy-btn').onclick = copyCostume;
     document.getElementById('costume-paste-btn').onclick = pasteCostume;
+    document.getElementById('camera-btn').onclick = enterCameraMode;
+    document.getElementById('camera-capture-btn').onclick = capturePhoto;
+    document.getElementById('camera-cancel-btn').onclick = () => exitCameraMode(true);
     document.getElementById('show-title-card-checkbox').onchange = (e) => { state.project.showTitleCard = e.target.checked; saveProject(); };
     const pencilSlider = document.getElementById('pencil-size');
     pencilSlider.onmousedown = () => { updateBrushPreview(); document.getElementById('brush-size-overlay').classList.remove('hidden'); };
@@ -1221,6 +1227,11 @@ function createListItem(t, canDel, index) {
 }
 
 function openEditor(t) { state.ui.editingTarget = t; state.ui.editingCostumeIndex = t.currentCostume; state.ui.undoStack = []; state.ui.redoStack = []; updateUndoRedoButtons(); state.ui.activePanel = 'editor'; updatePanelVisibility(); renderCostumeList(); state.ui.currentTool = 'pencil'; document.querySelectorAll('.main-tools button[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === 'pencil')); loadCostumeToEditor(t.costumes[state.ui.editingCostumeIndex]); }
+
+async function enterCameraMode() {}
+function capturePhoto() {}
+function exitCameraMode(restoreBackup) {}
+
 function renderCostumeList() {
     costumeList.innerHTML = ''; const t = state.ui.editingTarget; t.costumes.forEach((c, i) => {
         const div = document.createElement('div'); div.className = 'list-item' + (i === state.ui.editingCostumeIndex ? ' active' : '');
