@@ -631,7 +631,7 @@ function redo() { if (state.ui.redoStack.length === 0) return; const ctx = edito
 function applyEditorState(s) { editorCanvas.width = s.width; editorCanvas.height = s.height; const dw = 400, dh = dw * (s.height / s.width); editorCanvas.style.width = dw + 'px'; editorCanvas.style.height = dh + 'px'; const ctx = editorCanvas.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.putImageData(s.data, 0, 0); saveCurrentCostume(); updateLiveThumbnail(); }
 
 function startDraw(e) {
-    if (state.ui.activePanel !== 'editor') return;
+    if (state.ui.activePanel !== 'editor' || state.ui.cameraMode) return;
     const ctx = editorCanvas.getContext('2d'); preStrokeState = { width: editorCanvas.width, height: editorCanvas.height, data: ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height) }; isDrawing = true;
     const rect = editorCanvas.getBoundingClientRect(), sx = editorCanvas.width / rect.width, sy = editorCanvas.height / rect.height;
     startX = Math.floor((e.clientX - rect.left) * sx); startY = Math.floor((e.clientY - rect.top) * sy);
@@ -1282,7 +1282,34 @@ function cameraPreviewLoop(video) {
     requestAnimationFrame(() => cameraPreviewLoop(video));
 }
 
-function capturePhoto() {}
+function capturePhoto() {
+    if (!state.ui.cameraMode) return;
+    
+    const overlay = document.getElementById('countdown-overlay');
+    overlay.classList.remove('hidden');
+    
+    let count = 3;
+    overlay.textContent = count;
+    
+    const interval = setInterval(() => {
+        count--;
+        if (count > 0) {
+            overlay.textContent = count;
+        } else {
+            clearInterval(interval);
+            overlay.classList.add('hidden');
+            
+            // Finalize capture
+            commitUndo(state.ui.cameraBackup);
+            state.ui.cameraBackup = null; // Prevent restore in exitCameraMode
+            saveCurrentCostume();
+            updateLiveThumbnail();
+            renderActorList();
+            exitCameraMode(false);
+            saveProject();
+        }
+    }, 1000);
+}
 
 function exitCameraMode(restoreBackup) {
     if (state.ui.cameraStream) {
