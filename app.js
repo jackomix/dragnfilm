@@ -25,6 +25,7 @@ const state = {
         exportCanvas: null,
         exportCtx: null,
         exportFullMovie: true,
+        tcBuffer: null,
         lineDashOffset: 0,
         lastBoilUpdate: 0,
         movieStartSceneIndex: 0,
@@ -239,17 +240,32 @@ function renderLoop() {
             drawTitleCard(ctx, margin);
             if (state.ui.isExporting && state.ui.exportCtx) {
                 const expCtx = state.ui.exportCtx;
-                expCtx.fillStyle = state.project.titleBgColor;
-                expCtx.fillRect(0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
-                expCtx.save();
-                expCtx.scale(4, 4);
-                drawTitleCard(expCtx, 0);
-                expCtx.restore();
+                if (!state.ui.tcBuffer) {
+                    state.ui.tcBuffer = document.createElement('canvas');
+                    state.ui.tcBuffer.width = state.project.width;
+                    state.ui.tcBuffer.height = state.project.height;
+                }
+                const tcBufCtx = state.ui.tcBuffer.getContext('2d');
+                tcBufCtx.imageSmoothingEnabled = false;
+                drawTitleCard(tcBufCtx, 0);
+                expCtx.imageSmoothingEnabled = false;
+                expCtx.drawImage(state.ui.tcBuffer, 0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
+            }
+            if (state.ui.isPlaying) {
+                let deltaTime = now - state.ui.lastFrameTime;
+                if (deltaTime > 500) deltaTime = 500;
+                state.ui.timeAccumulator += deltaTime;
+                state.ui.lastFrameTime = now;
+                while (state.ui.timeAccumulator >= FRAME_DURATION) {
+                    state.ui.currentFrame++;
+                    state.ui.timeAccumulator -= FRAME_DURATION;
+                }
             }
             requestAnimationFrame(renderLoop);
             return;
         } else {
             state.ui.isTitleCardActive = false;
+            state.ui.tcBuffer = null;
             state.ui.currentFrame = -1;
             state.ui.lastFrameTime = performance.now();
             playAllAudio();
