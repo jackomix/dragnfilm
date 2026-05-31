@@ -19,6 +19,12 @@ const state = {
         clipboard: null,
         isRecording: false, isPlaying: false, isTheaterMode: false,
         isTitleCardActive: false,
+        isExporting: false,
+        exportRecorder: null,
+        exportDest: null,
+        exportCanvas: null,
+        exportCtx: null,
+        exportFullMovie: true,
         lineDashOffset: 0,
         lastBoilUpdate: 0,
         movieStartSceneIndex: 0,
@@ -231,6 +237,15 @@ function renderLoop() {
     if (state.ui.isTheaterMode && state.ui.isTitleCardActive && state.project.showTitleCard) {
         if (state.ui.currentFrame < titleCardDurationFrames) {
             drawTitleCard(ctx, margin);
+            if (state.ui.isExporting && state.ui.exportCtx) {
+                const expCtx = state.ui.exportCtx;
+                expCtx.fillStyle = state.project.titleBgColor;
+                expCtx.fillRect(0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
+                expCtx.save();
+                expCtx.scale(4, 4);
+                drawTitleCard(expCtx, 0);
+                expCtx.restore();
+            }
             requestAnimationFrame(renderLoop);
             return;
         } else {
@@ -249,7 +264,7 @@ function renderLoop() {
     const bd = scene.backdrop;
 
     if (state.ui.isPlaying && state.ui.currentFrame >= maxFrames) {
-        if (state.project.currentSceneIndex < state.project.scenes.length - 1) {
+        if (state.project.currentSceneIndex < state.project.scenes.length - 1 && (!state.ui.isExporting || state.ui.exportFullMovie)) {
             const currentSongId = scene.songId;
             state.project.currentSceneIndex++;
             const nextScene = getCurrentScene();
@@ -316,6 +331,11 @@ function renderLoop() {
     if (!state.ui.isTheaterMode && !state.ui.isPlaying && state.ui.selectedActorId === 'backdrop') drawSelectionOutline(ctx, margin, margin, state.project.width, state.project.height);
 
     if (state.ui.isPlaying && state.ui.currentFrame >= maxFrames && state.project.currentSceneIndex === state.project.scenes.length - 1) { ctx.fillStyle = "black"; ctx.font = "bold 20px Arial"; ctx.fillText("Fin.", margin + 10, margin + state.project.height - 15); }
+    
+    if (state.ui.isExporting && state.ui.exportCtx) {
+        renderProjectFrame(state.ui.exportCtx, state.ui.currentFrame, state.ui.exportCanvas.width, state.ui.exportCanvas.height, 4, scene);
+    }
+    
     requestAnimationFrame(renderLoop);
 }
 
@@ -685,6 +705,15 @@ function togglePlayback(asTheater, startFromBeginning) {
         document.getElementById('play-group').classList.remove('is-playing');
         stopAllAudio(); state.project.currentSceneIndex = state.ui.movieStartSceneIndex;
         renderActorList(); renderSceneList();
+        
+        if (state.ui.isExporting) {
+            state.ui.isExporting = false;
+            if (state.ui.exportRecorder) state.ui.exportRecorder.stop();
+            state.ui.exportRecorder = null;
+            state.ui.exportDest = null;
+            state.ui.exportCanvas = null;
+            state.ui.exportCtx = null;
+        }
     } else {
         state.ui.movieStartSceneIndex = state.project.currentSceneIndex;
         if (asTheater) { state.ui.isTheaterMode = true; document.body.classList.add('theater-mode'); }
@@ -740,6 +769,7 @@ function playSynth(freq, instrumentName, isChord, ctx = null, dest = null) {
         const target = dest || activeCtx.destination;
         gain.connect(target);
         if (!dest && musicDest) gain.connect(musicDest);
+        if (state.ui.isExporting && state.ui.exportDest) gain.connect(state.ui.exportDest);
         
         const now = activeCtx.currentTime;
         gain.gain.setValueAtTime(0.2, now);
@@ -759,6 +789,7 @@ function playDrum(degree, ctx = null, dest = null) {
     const target = dest || activeCtx.destination;
     gain.connect(target);
     if (!dest && musicDest) gain.connect(musicDest);
+    if (state.ui.isExporting && state.ui.exportDest) gain.connect(state.ui.exportDest);
     
     const now = activeCtx.currentTime;
     
@@ -790,6 +821,7 @@ function playAllAudio() {
         if (rec && rec.audio) {
             const audio = new Audio(rec.audio), source = audioContext.createMediaElementSource(audio), panner = audioContext.createStereoPanner(); 
             source.connect(panner); panner.connect(audioContext.destination); 
+            if (state.ui.isExporting && state.ui.exportDest) panner.connect(state.ui.exportDest);
             audio.play(); activeAudioPlayers.push({ audio, panner, target: t, source }); 
             if (t.id !== 'backdrop') { 
                 const iv = setInterval(() => { 
@@ -1340,6 +1372,7 @@ async function exportDragFile() {
 }
 
 async function exportMovie(fullMovie, format) {
+    if (state.ui.isExporting) return;
     const upScale = 4, expCanvas = document.createElement('canvas'); expCanvas.width = state.project.width * upScale; expCanvas.height = state.project.height * upScale;
     const expCtx = expCanvas.getContext('2d'); expCtx.imageSmoothingEnabled = false;
     const tcCanvas = document.createElement('canvas'); tcCanvas.width = state.project.width; tcCanvas.height = state.project.height;
@@ -1348,66 +1381,33 @@ async function exportMovie(fullMovie, format) {
     const durations = scenesToExport.map(s => getMaxFrames(s) || 30);
     const titleCardDurationFrames = (fullMovie && state.project.showTitleCard) ? 120 : 0;
     const totalFrames = durations.reduce((a, b) => a + b, 0) + titleCardDurationFrames;
-    togglePlayback(true, fullMovie);
+    
     if (format === 'video') {
-        const stream = expCanvas.captureStream(FPS), audioCtx = new (window.AudioContext || window.webkitAudioContext)(), dest = audioCtx.createMediaStreamDestination();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const exportPlayers = [];
-        let frameOffset = titleCardDurationFrames;
-        scenesToExport.forEach((scene, si) => {
-            [scene.backdrop, ...scene.actors].forEach(t => {
-                const rec = t.recordings[t.recordings.length - 1]; if (rec && rec.audio) {
-                    const audio = new Audio(rec.audio), source = audioCtx.createMediaElementSource(audio), panner = audioCtx.createStereoPanner();
-                    source.connect(panner); panner.connect(dest); 
-                    exportPlayers.push({ audio, panner, target: t, startFrame: frameOffset, durationFrames: durations[si] });
-                }
-            }); frameOffset += durations[si];
-        });
-        const recorder = new MediaRecorder(new MediaStream([...stream.getVideoTracks(), ...dest.stream.getAudioTracks()]), { mimeType: 'video/webm' }), chunks = [];
+        state.ui.isExporting = true;
+        state.ui.exportFullMovie = fullMovie;
+        state.ui.exportCanvas = expCanvas;
+        state.ui.exportCtx = expCtx;
+
+        const stream = state.ui.exportCanvas.captureStream(FPS);
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioContext.state === 'suspended') audioContext.resume();
+        state.ui.exportDest = audioContext.createMediaStreamDestination();
+        
+        const recorder = new MediaRecorder(new MediaStream([...stream.getVideoTracks(), ...state.ui.exportDest.stream.getAudioTracks()]), { mimeType: 'video/webm' });
+        const chunks = [];
         recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-        recorder.onstop = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })); a.download = fullMovie ? 'movie.webm' : 'scene.webm'; a.click(); exportPlayers.forEach(p => p.audio.pause()); audioCtx.close(); };
+        recorder.onstop = () => { 
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })); 
+            a.download = fullMovie ? 'movie.webm' : 'scene.webm'; 
+            a.click(); 
+        };
+        state.ui.exportRecorder = recorder;
         recorder.start(); 
         
-        let currentFrame = 0;
-        let lastExportSI = -1;
-
-        const interval = setInterval(() => {
-            if (!state.ui.isPlaying || currentFrame >= totalFrames) { if (state.ui.isPlaying) togglePlayback(); recorder.stop(); clearInterval(interval); return; }
-            if (currentFrame < titleCardDurationFrames) { tcCtx.clearRect(0,0,tcCanvas.width, tcCanvas.height); drawTitleCard(tcCtx, 0); expCtx.drawImage(tcCanvas, 0, 0, expCanvas.width, expCanvas.height); }
-            else {
-                let remaining = currentFrame - titleCardDurationFrames, currentSI = 0; while (remaining >= durations[currentSI] && currentSI < scenesToExport.length - 1) { remaining -= durations[currentSI]; currentSI++; }
-                if (currentSI !== lastExportSI) { lastExportSI = currentSI; }
-                
-                renderProjectFrame(expCtx, remaining, expCanvas.width, expCanvas.height, upScale, scenesToExport[currentSI]);
-                
-                const song = scenesToExport[currentSI].songId ? state.project.songs.find(s => s.id === scenesToExport[currentSI].songId) : null;
-                if (song) {
-                    const framesPerSub = (60 * FPS) / (song.bpm * 2);
-                    const absoluteSongFrame = currentFrame - titleCardDurationFrames;
-                    const currentSub = Math.floor(absoluteSongFrame / framesPerSub);
-                    const lastSub = Math.floor((absoluteSongFrame - 1) / framesPerSub);
-                    if (currentSub !== lastSub) {
-                        const loopSub = currentSub % (song.bars * 8);
-                        ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub, audioCtx, dest));
-                    }
-                }
-
-                exportPlayers.forEach(p => {
-                    if (currentFrame >= p.startFrame && currentFrame < p.startFrame + p.durationFrames) {
-                        if (p.audio.paused) {
-                            p.audio.currentTime = (currentFrame - p.startFrame) * FRAME_DURATION / 1000;
-                            p.audio.play();
-                        }
-                        if (p.target.id !== 'backdrop') {
-                            const { x } = getActorDisplayState(p.target, currentFrame - p.startFrame);
-                            p.panner.pan.value = ((x / state.project.width) * 2 - 1) * 0.5;
-                        }
-                    } else if (!p.audio.paused) { p.audio.pause(); }
-                });
-            }
-            currentFrame++;
-        }, FRAME_DURATION);
+        togglePlayback(true, fullMovie);
     } else {
+        togglePlayback(true, fullMovie);
         const { GIFEncoder, quantize, applyPalette } = await import('https://unpkg.com/gifenc?module');
         const fps = 15, framesPerGifFrame = 60 / fps, delay = 1000 / fps, gif = GIFEncoder();
         for (let f = 0; f < totalFrames; f += framesPerGifFrame) {
