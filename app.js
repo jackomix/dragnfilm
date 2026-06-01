@@ -914,20 +914,26 @@ function playSynth(freqs, instrumentName, ctx = null, dest = null, duration = 0.
         }
 
         if (useChorus) {
-            const chorusDelay = activeCtx.createDelay();
-            const lfo = activeCtx.createOscillator();
-            const lfoGain = activeCtx.createGain();
+            // Stereo Chorus Setup
+            const panL = activeCtx.createStereoPanner(); panL.pan.value = -0.5;
+            const panR = activeCtx.createStereoPanner(); panR.pan.value = 0.5;
             
-            lfo.frequency.value = 2; // Chorus modulation speed
-            lfoGain.gain.value = 0.005; // Modulation depth
+            const delayL = activeCtx.createDelay(); delayL.delayTime.value = 0.02;
+            const delayR = activeCtx.createDelay(); delayR.delayTime.value = 0.025;
+            
+            const lfo = activeCtx.createOscillator(); lfo.frequency.value = 1.5;
+            const lfoGain = activeCtx.createGain(); lfoGain.gain.value = 0.002; // Reduced depth
+            
             lfo.connect(lfoGain);
-            lfoGain.connect(chorusDelay.delayTime);
+            lfoGain.connect(delayL.delayTime);
+            lfoGain.connect(delayR.delayTime);
             
-            gain.connect(chorusDelay);
-            chorusDelay.connect(activeCtx.destination);
-            if (dest && dest !== activeCtx.destination) chorusDelay.connect(dest);
-            lfo.start(now);
-            lfo.stop(now + duration + 1.0);
+            gain.connect(delayL); gain.connect(delayR);
+            delayL.connect(panL); delayR.connect(panR);
+            panL.connect(activeCtx.destination); panR.connect(activeCtx.destination);
+            if (dest && dest !== activeCtx.destination) { panL.connect(dest); panR.connect(dest); }
+            
+            lfo.start(now); lfo.stop(now + duration + 1.0);
         }
 
         if (!dest && musicDest) gain.connect(musicDest);
