@@ -518,7 +518,7 @@ button:disabled {
     display: flex;
     align-items: center;
     width: 100%;
-    padding: 0;
+    padding: 10px; /* More padding like other panels */
     border-bottom: 1px solid black;
     background: white;
 }
@@ -526,10 +526,8 @@ button:disabled {
 .song-editor-controls {
     margin-left: auto;
     display: flex;
-    gap: 10px;
+    gap: 15px; /* Increased gap */
     align-items: center;
-    font-size: 13px;
-    padding: 5px;
 }
 
 .song-editor-controls select {
@@ -540,7 +538,16 @@ button:disabled {
     font-size: 13px;
     cursor: pointer;
     border-radius: 0;
-    -webkit-appearance: none; /* Optional: more control over style */
+    min-width: 100px; /* Ensure labels don't cut off */
+}
+
+#studio-song-name {
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: 0;
 }
 
 #studio-bpm { width: 50px; }
@@ -557,7 +564,7 @@ button:disabled {
 }
 
 .instrument-sidebar {
-    width: 60px; /* Narrower for icon-only look */
+    width: 100px; /* Widened from 60px */
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -566,10 +573,11 @@ button:disabled {
 }
 
 .inst-tab {
-    padding: 0;
-    width: 60px;
-    height: 60px;
-    font-size: 24px;
+    padding: 10px 5px;
+    width: 100%;
+    height: auto; /* Allow height to fit content */
+    min-height: 80px;
+    font-size: 14px;
     text-align: center;
     background: white;
     border: 1px solid #000;
@@ -577,8 +585,14 @@ button:disabled {
     box-sizing: border-box;
     margin-bottom: -1px;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 5px;
+}
+
+.inst-tab span {
+    font-size: 24px; /* Icon size */
 }
 
 .inst-tab.active {
