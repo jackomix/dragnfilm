@@ -911,6 +911,14 @@ function playSynth(freqs, instrumentName, ctx = null, dest = null, duration = 0.
             feedback.connect(delay);
             feedback.connect(activeCtx.destination);
             if (dest && dest !== activeCtx.destination) feedback.connect(dest);
+
+            // Cleanup echo nodes after feedback fades out (~2 seconds)
+            const echoDuration = 2.0;
+            const cleanupTime = now + echoDuration;
+            setTimeout(() => {
+                delay.disconnect();
+                feedback.disconnect();
+            }, echoDuration * 1000);
         }
 
         if (useChorus) {
@@ -922,7 +930,7 @@ function playSynth(freqs, instrumentName, ctx = null, dest = null, duration = 0.
             const delayR = activeCtx.createDelay(); delayR.delayTime.value = 0.025;
             
             const lfo = activeCtx.createOscillator(); lfo.frequency.value = 1.5;
-            const lfoGain = activeCtx.createGain(); lfoGain.gain.value = 0.002; // Reduced depth
+            const lfoGain = activeCtx.createGain(); lfoGain.gain.value = 0.0035; // Fine-tuned depth
             
             lfo.connect(lfoGain);
             lfoGain.connect(delayL.delayTime);
