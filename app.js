@@ -1062,7 +1062,9 @@ function startSongPreview() {
     state.ui.previewFrame = 0;
     state.ui.lastPreviewTime = performance.now();
     state.ui.previewAccumulator = 0;
-    document.getElementById('studio-preview-toggle-btn').textContent = '⏹️';
+    const btn = document.getElementById('studio-preview-toggle-btn');
+    btn.textContent = '⏹️';
+    btn.classList.add('active');
 
     function previewLoop() {
         if (!state.ui.isPreviewPlaying) return;
@@ -1096,7 +1098,9 @@ function startSongPreview() {
 function stopSongPreview() {
     state.ui.isPreviewPlaying = false;
     state.ui.previewFrame = 0;
-    document.getElementById('studio-preview-toggle-btn').textContent = '▶️';
+    const btn = document.getElementById('studio-preview-toggle-btn');
+    btn.textContent = '▶️';
+    btn.classList.remove('active');
     renderSongStudioGrid();
 }
 
