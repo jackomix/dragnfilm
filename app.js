@@ -660,8 +660,19 @@ function bindEvents() {
                 playDrum(degree, null, null, echo);
             } else {
                 const octaveOffset = state.ui.activeTrack === 'bass' ? -2 : (state.ui.activeTrack === 'lead' ? 1 : (state.ui.activeTrack === 'chords' ? -1 : 0));
-                const freq = getFrequencyForDegree(degree, song.key, song.scale, octaveOffset);
-                playSynth(freq, track.instrument, state.ui.activeTrack === 'chords', null, null, 0.3, echo);
+                
+                let freqs = [];
+                if (state.ui.activeTrack === 'chords') {
+                    freqs = [
+                        getFrequencyForDegree(degree, song.key, song.scale, octaveOffset),
+                        getFrequencyForDegree(degree + 2, song.key, song.scale, octaveOffset),
+                        getFrequencyForDegree(degree + 4, song.key, song.scale, octaveOffset)
+                    ];
+                } else {
+                    freqs = [getFrequencyForDegree(degree, song.key, song.scale, octaveOffset)];
+                }
+
+                playSynth(freqs, track.instrument, null, null, 0.3, echo);
             }
         } else if (state.ui.gridDragMode === 'erase' && idx !== -1) {
             track.notes[col].splice(idx, 1);
@@ -842,22 +853,32 @@ function triggerSongNote(song, trackName, subdivisionIndex, ctx = null, dest = n
             playDrum(degree, ctx, dest, echo);
         } else {
             const octaveOffset = trackName === 'bass' ? -2 : (trackName === 'lead' ? 1 : (trackName === 'chords' ? -1 : 0));
-            const freq = getFrequencyForDegree(degree, song.key, song.scale, octaveOffset);
-            playSynth(freq, track.instrument, trackName === 'chords', ctx, dest, duration, echo);
+            
+            let freqs = [];
+            if (trackName === 'chords') {
+                // Diatonic Triad: root, 3rd, 5th
+                freqs = [
+                    getFrequencyForDegree(degree, song.key, song.scale, octaveOffset),
+                    getFrequencyForDegree(degree + 2, song.key, song.scale, octaveOffset),
+                    getFrequencyForDegree(degree + 4, song.key, song.scale, octaveOffset)
+                ];
+            } else {
+                freqs = [getFrequencyForDegree(degree, song.key, song.scale, octaveOffset)];
+            }
+            
+            playSynth(freqs, track.instrument, ctx, dest, duration, echo);
         }
     });
 }
 
-function playSynth(freq, instrumentName, isChord, ctx = null, dest = null, duration = 0.2, useEcho = false) {
+function playSynth(freqs, instrumentName, ctx = null, dest = null, duration = 0.2, useEcho = false) {
     const activeCtx = ctx || audioContext || (audioContext = new (window.AudioContext || window.webkitAudioContext)());
     if (activeCtx.state === 'suspended') activeCtx.resume();
     
     const inst = instruments[instrumentName] || instruments.synth;
-    const freqs = isChord ? [freq, freq * Math.pow(2, 4/12), freq * Math.pow(2, 7/12)] : [freq];
     
-    const maxGain = 0.2;
+    const maxGain = 0.2 / freqs.length; // Prevent clipping by normalizing volume
     const now = activeCtx.currentTime;
-    const target = dest || activeCtx.destination;
     
     freqs.forEach(f => {
         const osc = activeCtx.createOscillator();
