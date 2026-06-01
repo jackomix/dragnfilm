@@ -101,22 +101,15 @@ canvas {
 
 /* Progress Bar */
 #progress-container {
-    position: absolute;
-    bottom: -12px; /* Hang just below the canvas */
+    position: fixed;
+    top: 0;
     left: 0;
     width: 100%;
     height: 12px;
     background: #eee;
     z-index: 300;
     display: flex;
-    border: 1px solid black;
-    border-top: none; /* Connect to the bottom of the stage shadow/border */
-    box-sizing: border-box;
-}
-
-body.theater-mode #progress-container {
-    bottom: 0;
-    border: none;
+    border-bottom: 1px solid black;
 }
 
 #progress-bar {
