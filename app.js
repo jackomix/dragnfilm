@@ -470,7 +470,7 @@ function getMaxFrames(scene) {
 }
 
 function onStageMouseDown(e) {
-    if (state.ui.activePanel === 'editor' || state.ui.isPlaying || state.countdownTimer) return;
+    if (state.ui.activePanel === 'editor' || state.ui.isPlaying) return;
     const rect = stage.getBoundingClientRect(), sx = stage.width / rect.width, sy = stage.height / rect.height;
     const mx = (e.clientX - rect.left) * sx - state.ui.stageMargin, my = (e.clientY - rect.top) * sy - state.ui.stageMargin;
     let hit = false, scene = getCurrentScene(), frameIndex = state.ui.currentFrame;
@@ -479,14 +479,24 @@ function onStageMouseDown(e) {
         if (mx >= ax && mx <= ax + c.canvas.width && my >= ay && my <= ay + c.canvas.height) {
             const px = Math.floor(mx - ax), py = Math.floor(my - ay);
             if (px >= 0 && px < c.canvas.width && py >= 0 && py < c.canvas.height) {
-                if (c.canvas.getContext('2d').getImageData(px, py, 1, 1).data[3] > 10) { state.ui.selectedActorId = a.id; const rec = a.recordings[a.recordings.length - 1]; if (state.ui.isRecording || !rec || rec.frames?.length === 0) { draggedActor = a; dragOffsetX = mx - x; dragOffsetY = my - y; } hit = true; break; }
+                if (c.canvas.getContext('2d').getImageData(px, py, 1, 1).data[3] > 10) { 
+                    if (state.countdownTimer && state.ui.selectedActorId !== a.id) return;
+                    state.ui.selectedActorId = a.id; 
+                    const rec = a.recordings[a.recordings.length - 1]; 
+                    if (state.ui.isRecording || state.countdownTimer || !rec || rec.frames?.length === 0) { draggedActor = a; dragOffsetX = mx - x; dragOffsetY = my - y; } 
+                    hit = true; break; 
+                }
             }
         }
     }
     if (!hit) {
         if (mx >= 0 && mx <= state.project.width && my >= 0 && my <= state.project.height) {
+            if (state.countdownTimer && state.ui.selectedActorId !== 'backdrop') return;
             state.ui.selectedActorId = 'backdrop';
-        } else state.ui.selectedActorId = null;
+        } else {
+            if (state.countdownTimer) return;
+            state.ui.selectedActorId = null;
+        }
     }
     renderActorList();
 }
