@@ -413,6 +413,12 @@ function renderLoop() {
     if (!state.ui.isTheaterMode && !state.ui.isPlaying && state.ui.selectedActorId === 'backdrop') drawSelectionOutline(ctx, margin, margin, state.project.width, state.project.height);
 
     if (state.ui.isEndCardActive) {
+        // 1. Desaturate to pure grayscale
+        ctx.globalCompositeOperation = "saturation";
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(margin, margin, state.project.width, state.project.height);
+        
+        // 2. Apply the color wash
         ctx.globalCompositeOperation = "multiply";
         ctx.fillStyle = state.project.endCardTintColor;
         ctx.fillRect(margin, margin, state.project.width, state.project.height);
@@ -433,6 +439,13 @@ function renderLoop() {
             renderProjectFrame(state.ui.exportCtx, renderFrame, state.ui.exportCanvas.width, state.ui.exportCanvas.height, 4, renderScene);
             if (state.ui.isEndCardActive) {
                 const expCtx = state.ui.exportCtx;
+                
+                // 1. Desaturate
+                expCtx.globalCompositeOperation = "saturation";
+                expCtx.fillStyle = "#000000";
+                expCtx.fillRect(0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
+                
+                // 2. Apply color wash
                 expCtx.globalCompositeOperation = "multiply";
                 expCtx.fillStyle = state.project.endCardTintColor;
                 expCtx.fillRect(0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
