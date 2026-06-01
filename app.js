@@ -1508,17 +1508,25 @@ function updateMovieExportButtons() { const el = document.getElementById('movie-
 
 function addActor() { const a = { id: 'actor_' + Date.now(), name: 'Actor ' + (getCurrentScene().actors.length + 1), costumes: [createEmptyCostume(64, 64)], currentCostume: 0, x: state.project.width / 2, y: state.project.height / 2, recordings: [] }; getCurrentScene().actors.push(a); state.ui.selectedActorId = a.id; renderActorList(); saveProject(); }
 function renderActorList() {
-    actorList.innerHTML = ''; const scene = getCurrentScene(); if (!scene) return;
-    actorList.appendChild(createListItem(scene.backdrop, false, -1));
+    actorList.innerHTML = ''; 
+    const scene = getCurrentScene(); 
+    if (!scene) return;
+    
+    if (scene.backdrop) {
+        actorList.appendChild(createListItem(scene.backdrop, false, -1));
+    }
     const sep = document.createElement('div'); sep.className = 'backdrop-separator'; actorList.appendChild(sep);
-    scene.actors.forEach((a, i) => {
-        const item = createListItem(a, true, i); item.draggable = true;
-        item.ondragstart = (e) => { if (e.target.classList.contains('clickable-name') || e.target.classList.contains('clickable-icon')) { e.preventDefault(); return; } dragSrcIndex = i; item.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; };
-        item.ondragend = () => { item.classList.remove('dragging'); document.querySelectorAll('.list-item').forEach(el => el.classList.remove('drag-over')); };
-        item.ondragover = (e) => { e.preventDefault(); item.classList.add('drag-over'); };
-        item.ondrop = (e) => { e.preventDefault(); if (dragSrcIndex !== -1 && dragSrcIndex !== i) { const moved = scene.actors.splice(dragSrcIndex, 1)[0]; scene.actors.splice(i, 0, moved); renderActorList(); saveProject(); } };
-        actorList.appendChild(item);
-    });
+    if (scene.actors) {
+        scene.actors.forEach((a, i) => {
+            const item = createListItem(a, true, i); item.draggable = true;
+            // ... (rest of the listeners)
+            item.ondragstart = (e) => { if (e.target.classList.contains('clickable-name') || e.target.classList.contains('clickable-icon')) { e.preventDefault(); return; } dragSrcIndex = i; item.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; };
+            item.ondragend = () => { item.classList.remove('dragging'); document.querySelectorAll('.list-item').forEach(el => el.classList.remove('drag-over')); };
+            item.ondragover = (e) => { e.preventDefault(); item.classList.add('drag-over'); };
+            item.ondrop = (e) => { e.preventDefault(); if (dragSrcIndex !== -1 && dragSrcIndex !== i) { const moved = scene.actors.splice(dragSrcIndex, 1)[0]; scene.actors.splice(i, 0, moved); renderActorList(); saveProject(); } };
+            actorList.appendChild(item);
+        });
+    }
 }
 function createListItem(t, canDel, index) {
     const div = document.createElement('div'); div.className = 'list-item' + (state.ui.selectedActorId === t.id ? ' active' : '');
