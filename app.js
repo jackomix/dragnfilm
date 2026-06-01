@@ -470,7 +470,7 @@ function getMaxFrames(scene) {
 }
 
 function onStageMouseDown(e) {
-    if (state.ui.activePanel === 'editor' || state.ui.isPlaying) return;
+    if (state.ui.activePanel === 'editor' || state.ui.isPlaying || state.countdownTimer) return;
     const rect = stage.getBoundingClientRect(), sx = stage.width / rect.width, sy = stage.height / rect.height;
     const mx = (e.clientX - rect.left) * sx - state.ui.stageMargin, my = (e.clientY - rect.top) * sy - state.ui.stageMargin;
     let hit = false, scene = getCurrentScene(), frameIndex = state.ui.currentFrame;
@@ -1513,7 +1513,10 @@ function createListItem(t, canDel, index) {
     const acts = document.createElement('div'); acts.style.marginLeft = 'auto'; acts.style.display = 'flex'; acts.style.gap = '2px';
     const edit = document.createElement('button'); edit.textContent = '✎'; edit.onclick = (e) => { e.stopPropagation(); openEditor(t); }; acts.appendChild(edit);
     if (canDel) { const del = document.createElement('button'); del.textContent = '🗑'; del.onclick = (e) => { e.stopPropagation(); if (confirm(`Delete actor "${t.name}"?`)) { const s = getCurrentScene(); s.actors = s.actors.filter(ac => ac.id !== t.id); renderActorList(); saveProject(); } }; acts.appendChild(del); }
-    div.appendChild(acts); div.onclick = () => { state.ui.selectedActorId = t.id; renderActorList(); }; return div;
+    div.appendChild(acts); div.onclick = () => { 
+        if (state.countdownTimer) return;
+        state.ui.selectedActorId = t.id; renderActorList(); 
+    }; return div;
 }
 
 function openEditor(t) { state.ui.editingTarget = t; state.ui.editingCostumeIndex = t.currentCostume; state.ui.undoStack = []; state.ui.redoStack = []; updateUndoRedoButtons(); state.ui.activePanel = 'editor'; updatePanelVisibility(); renderCostumeList(); state.ui.currentTool = 'pencil'; document.querySelectorAll('.main-tools button[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === 'pencil')); loadCostumeToEditor(t.costumes[state.ui.editingCostumeIndex]); }
@@ -1797,25 +1800,25 @@ async function exportMovie(fullMovie, format) {
     const titleCardDurationFrames = (fullMovie && state.project.showTitleCard) ? 120 : 0;
     const totalFrames = durations.reduce((a, b) => a + b, 0) + titleCardDurationFrames;
     
-    if (format === 'video') {
-        state.ui.isExporting = true;
-        state.ui.exportFullMovie = fullMovie;
-        state.ui.exportCanvas = expCanvas;
-        state.ui.exportCtx = expCtx;
+    state.ui.isExporting = true;
+    state.ui.exportFullMovie = fullMovie;
+    state.ui.exportCanvas = expCanvas;
+    state.ui.exportCtx = expCtx;
 
-        const stream = state.ui.exportCanvas.captureStream(FPS);
+    if (format === 'video') {
         if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
         if (audioContext.state === 'suspended') audioContext.resume();
         state.ui.exportDest = audioContext.createMediaStreamDestination();
         
-        // AUDIO STARVATION FIX: Inject continuous silence so MediaRecorder doesn't stall waiting for playAllAudio()
+        // AUDIO STARVATION FIX: Inject continuous silence
         const silentOsc = audioContext.createOscillator();
         const silentGain = audioContext.createGain();
-        silentGain.gain.value = 0; // Pure silence
+        silentGain.gain.value = 0;
         silentOsc.connect(silentGain);
         silentGain.connect(state.ui.exportDest);
         silentOsc.start();
         
+        const stream = state.ui.exportCanvas.captureStream(0); // Manual frame capture
         const recorder = new MediaRecorder(new MediaStream([...stream.getVideoTracks(), ...state.ui.exportDest.stream.getAudioTracks()]), { mimeType: 'video/webm' });
         const chunks = [];
         recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
@@ -1824,13 +1827,47 @@ async function exportMovie(fullMovie, format) {
             a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })); 
             a.download = fullMovie ? 'movie.webm' : 'scene.webm'; 
             a.click(); 
+            state.ui.isExporting = false;
+            state.ui.exportDest = null;
         };
-        state.ui.exportRecorder = recorder;
-        recorder.start(); 
-        
-        togglePlayback(true, fullMovie);
+        recorder.start();
+
+        // Manual Frame-by-Frame Export Loop (Not visibility-throttled)
+        for (let f = 0; f < totalFrames; f++) {
+            if (f < titleCardDurationFrames) {
+                tcCtx.clearRect(0,0,tcCanvas.width, tcCanvas.height);
+                drawTitleCard(tcCtx, 0);
+                expCtx.drawImage(tcCanvas, 0, 0, expCanvas.width, expCanvas.height);
+            } else {
+                let remaining = f - titleCardDurationFrames, currentSI = 0;
+                while (remaining >= durations[currentSI] && currentSI < scenesToExport.length - 1) {
+                    remaining -= durations[currentSI];
+                    currentSI++;
+                }
+                const scene = scenesToExport[currentSI];
+                renderProjectFrame(expCtx, remaining, expCanvas.width, expCanvas.height, upScale, scene);
+
+                // Music triggering during export
+                const song = scene.songId ? state.project.songs.find(s => s.id === scene.songId) : null;
+                if (song) {
+                    const msPerSub = 30000 / song.bpm;
+                    const frameMs = f * FRAME_DURATION;
+                    const currentSub = Math.floor(frameMs / msPerSub);
+                    const lastSub = f === 0 ? -1 : Math.floor(((f - 1) * FRAME_DURATION) / msPerSub);
+                    if (currentSub !== lastSub) {
+                        const loopSub = currentSub % (song.bars * 8);
+                        ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub, audioContext, state.ui.exportDest));
+                    }
+                }
+            }
+            
+            stream.getVideoTracks()[0].requestFrame(); // Capture this specific frame
+            updateProgressBarUI(f, totalFrames);
+            await new Promise(r => setTimeout(r, 1000/FPS)); // Control export speed without throttling
+        }
+        recorder.stop();
     } else {
-        togglePlayback(true, fullMovie);
+        // GIF logic already used its own loop
         const { GIFEncoder, quantize, applyPalette } = await import('https://unpkg.com/gifenc?module');
         const fps = 15, framesPerGifFrame = 60 / fps, delay = 1000 / fps, gif = GIFEncoder();
         for (let f = 0; f < totalFrames; f += framesPerGifFrame) {
@@ -1842,9 +1879,14 @@ async function exportMovie(fullMovie, format) {
             }
             const { data, width, height } = expCtx.getImageData(0, 0, expCanvas.width, expCanvas.height), palette = quantize(data, 256), index = applyPalette(data, palette);
             gif.writeFrame(index, width, height, { palette, delay });
+            updateProgressBarUI(currentFrame, totalFrames);
         }
-        if (state.ui.isPlaying) togglePlayback();
-        gif.finish(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([gif.bytes()], { type: 'image/gif' })); a.download = fullMovie ? 'movie.gif' : 'scene.gif'; a.click();
+        gif.finish(); 
+        const a = document.createElement('a'); 
+        a.href = URL.createObjectURL(new Blob([gif.bytes()], { type: 'image/gif' })); 
+        a.download = fullMovie ? 'movie.gif' : 'scene.gif'; 
+        a.click();
+        state.ui.isExporting = false;
     }
 }
 function newProject() { if (confirm("Start a new project? All unsaved changes will be lost.")) { state.ui.isResetting = true; sessionStorage.setItem('drag-n-film-reset', 'true'); location.reload(); } }
