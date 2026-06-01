@@ -418,11 +418,9 @@ function renderLoop() {
         ctx.fillRect(margin, margin, state.project.width, state.project.height);
         ctx.globalCompositeOperation = "source-over";
         
-        ctx.fillStyle = state.project.endCardTextColor;
         ctx.font = `bold 24px "${state.project.fontStyle}"`;
         ctx.textBaseline = 'bottom';
-        ctx.textAlign = 'left';
-        ctx.fillText(state.project.endCardText, margin + 10, margin + state.project.height - 10);
+        drawBoilingText(ctx, state.project.endCardText, margin + 10, margin + state.project.height - 10, state.project.endCardTextColor, "left");
     }
 
     if (state.ui.isExporting && state.ui.exportCtx) {
@@ -440,11 +438,9 @@ function renderLoop() {
                 expCtx.fillRect(0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
                 expCtx.globalCompositeOperation = "source-over";
                 
-                expCtx.fillStyle = state.project.endCardTextColor;
                 expCtx.font = `bold ${24 * 4}px "${state.project.fontStyle}"`;
                 expCtx.textBaseline = 'bottom';
-                expCtx.textAlign = 'left';
-                expCtx.fillText(state.project.endCardText, 10 * 4, state.ui.exportCanvas.height - 10 * 4);
+                drawBoilingText(expCtx, state.project.endCardText, 10 * 4, state.ui.exportCanvas.height - 10 * 4, state.project.endCardTextColor, "left");
             }
         }
     }
@@ -463,13 +459,17 @@ function drawTitleCard(ctx, margin) {
     drawBoilingText(ctx, "by " + p.creatorName, margin + p.width/2, margin + p.height/2 + 20, p.titleTextColor);
 }
 
-function drawBoilingText(ctx, text, x, y, color) {
+function drawBoilingText(ctx, text, x, y, color, align = "center") {
     ctx.fillStyle = color;
     const now = Date.now();
     if (now - state.ui.lastBoilUpdate > 150) { state.ui.boilSeed = Math.random(); state.ui.lastBoilUpdate = now; }
     const extraSpacing = state.project.fontStyle === 'Impact' ? 1 : 0;
     const fullWidth = ctx.measureText(text).width + (text.length - 1) * extraSpacing;
-    let startX = x - fullWidth / 2;
+    
+    let startX = x;
+    if (align === "center") startX = x - fullWidth / 2;
+    else if (align === "right") startX = x - fullWidth;
+    
     const originalAlign = ctx.textAlign;
     ctx.textAlign = "left";
     const chars = text.split('');
