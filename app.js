@@ -856,10 +856,11 @@ function triggerSongNote(song, trackName, subdivisionIndex, ctx = null, dest = n
 
     const duration = 30000 / song.bpm / 1000;
     const echo = !!track.echo;
+    const chorus = !!track.chorus;
 
     degrees.forEach(degree => {
         if (trackName === 'drums') {
-            playDrum(degree, ctx, dest, echo);
+            playDrum(degree, ctx, dest, echo, chorus);
         } else {
             const octaveOffset = trackName === 'bass' ? -2 : (trackName === 'lead' ? 1 : (trackName === 'chords' ? -1 : 0));
             
@@ -875,12 +876,12 @@ function triggerSongNote(song, trackName, subdivisionIndex, ctx = null, dest = n
                 freqs = [getFrequencyForDegree(degree, song.key, song.scale, octaveOffset)];
             }
             
-            playSynth(freqs, track.instrument, ctx, dest, duration, echo);
+            playSynth(freqs, track.instrument, ctx, dest, duration, echo, chorus);
         }
     });
 }
 
-function playSynth(freqs, instrumentName, ctx = null, dest = null, duration = 0.2, useEcho = false) {
+function playSynth(freqs, instrumentName, ctx = null, dest = null, duration = 0.2, useEcho = false, useChorus = false) {
     const activeCtx = ctx || audioContext || (audioContext = new (window.AudioContext || window.webkitAudioContext)());
     if (activeCtx.state === 'suspended') activeCtx.resume();
     
@@ -910,6 +911,23 @@ function playSynth(freqs, instrumentName, ctx = null, dest = null, duration = 0.
             feedback.connect(delay);
             feedback.connect(activeCtx.destination);
             if (dest && dest !== activeCtx.destination) feedback.connect(dest);
+        }
+
+        if (useChorus) {
+            const chorusDelay = activeCtx.createDelay();
+            const lfo = activeCtx.createOscillator();
+            const lfoGain = activeCtx.createGain();
+            
+            lfo.frequency.value = 2; // Chorus modulation speed
+            lfoGain.gain.value = 0.005; // Modulation depth
+            lfo.connect(lfoGain);
+            lfoGain.connect(chorusDelay.delayTime);
+            
+            gain.connect(chorusDelay);
+            chorusDelay.connect(activeCtx.destination);
+            if (dest && dest !== activeCtx.destination) chorusDelay.connect(dest);
+            lfo.start(now);
+            lfo.stop(now + duration + 1.0);
         }
 
         if (!dest && musicDest) gain.connect(musicDest);
@@ -1223,10 +1241,10 @@ function addSong() {
         scale: 'happy',
         bars: 4,
         tracks: {
-            lead: { instrument: 'piano', notes: {}, echo: false },
-            chords: { instrument: 'synth', notes: {}, echo: false },
-            bass: { instrument: 'synth', notes: {}, echo: false },
-            drums: { instrument: 'drum', notes: {}, echo: false }
+            lead: { instrument: 'piano', notes: {}, echo: false, chorus: false },
+            chords: { instrument: 'synth', notes: {}, echo: false, chorus: false },
+            bass: { instrument: 'synth', notes: {}, echo: false, chorus: false },
+            drums: { instrument: 'drum', notes: {}, echo: false, chorus: false }
         }
     };
     state.project.songs.push(song);
@@ -1346,6 +1364,14 @@ function updateInstrumentSelect() {
     echoCheck.checked = !!song.tracks[state.ui.activeTrack].echo;
     echoCheck.onchange = (e) => {
         song.tracks[state.ui.activeTrack].echo = e.target.checked;
+        e.target.blur();
+        saveProject();
+    };
+
+    const chorusCheck = document.getElementById('studio-track-chorus');
+    chorusCheck.checked = !!song.tracks[state.ui.activeTrack].chorus;
+    chorusCheck.onchange = (e) => {
+        song.tracks[state.ui.activeTrack].chorus = e.target.checked;
         e.target.blur();
         saveProject();
     };
