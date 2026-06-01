@@ -144,30 +144,6 @@ function syncMovieInputs() {
     document.getElementById('end-card-text-input').value = state.project.endCardText;
     document.getElementById('end-card-text-color').value = state.project.endCardTextColor;
     document.getElementById('end-card-tint-color').value = state.project.endCardTintColor;
-    populateCardSongSelects();
-}
-
-function populateCardSongSelects() {
-    const titleSelect = document.getElementById('title-song-select');
-    const endSelect = document.getElementById('end-song-select');
-    if (!titleSelect || !endSelect) return;
-    
-    titleSelect.innerHTML = '<option value="">None</option>';
-    endSelect.innerHTML = '<option value="">None</option>';
-    
-    state.project.songs.forEach(song => {
-        const tOpt = document.createElement('option');
-        tOpt.value = song.id;
-        tOpt.textContent = song.name;
-        if (state.project.titleSongId === song.id) tOpt.selected = true;
-        titleSelect.appendChild(tOpt);
-        
-        const eOpt = document.createElement('option');
-        eOpt.value = song.id;
-        eOpt.textContent = song.name;
-        if (state.project.endSongId === song.id) eOpt.selected = true;
-        endSelect.appendChild(eOpt);
-    });
 }
 
 let draggedActor = null, dragOffsetX = 0, dragOffsetY = 0, dragSrcIndex = -1;
@@ -691,13 +667,10 @@ function bindEvents() {
     document.getElementById('movie-bg-color').oninput = (e) => { state.project.titleBgColor = e.target.value; saveProject(); };
     document.getElementById('movie-text-color').oninput = (e) => { state.project.titleTextColor = e.target.value; saveProject(); };
     
-    document.getElementById('title-song-select').onchange = (e) => { state.project.titleSongId = e.target.value || null; saveProject(); };
-    
     document.getElementById('show-end-card-checkbox').onchange = (e) => { state.project.endCardEnabled = e.target.checked; renderSoundtrackPanel(); saveProject(); };
     document.getElementById('end-card-text-input').oninput = (e) => { state.project.endCardText = e.target.value; saveProject(); };
     document.getElementById('end-card-text-color').oninput = (e) => { state.project.endCardTextColor = e.target.value; saveProject(); };
     document.getElementById('end-card-tint-color').oninput = (e) => { state.project.endCardTintColor = e.target.value; saveProject(); };
-    document.getElementById('end-song-select').onchange = (e) => { state.project.endSongId = e.target.value || null; saveProject(); };
     document.querySelectorAll('.inst-tab').forEach(btn => {
         btn.onclick = () => {
             state.ui.activeTrack = btn.dataset.track;
