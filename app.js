@@ -43,7 +43,7 @@ const state = {
         previewFrame: 0,
         lastPreviewTime: 0,
         previewAccumulator: 0,
-        cameraMode: false,
+        lastTriggeredSub: -1,
         cameraStream: null,
         cameraBackup: null
     },
@@ -59,6 +59,21 @@ const colors = [
 
 const FPS = 60;
 const FRAME_DURATION = 1000 / FPS;
+
+const SPEED_PRESETS = [
+    { label: 'Snail', bpm: 60 },
+    { label: 'Slow', bpm: 90 },
+    { label: 'Normal', bpm: 120 },
+    { label: 'Fast', bpm: 150 },
+    { label: 'Techno', bpm: 180 }
+];
+
+const LENGTH_PRESETS = [
+    { label: 'Short', bars: 2 },
+    { label: 'Medium', bars: 4 },
+    { label: 'Long', bars: 8 },
+    { label: 'Epic', bars: 16 }
+];
 
 const instruments = {
     piano: { name: "Piano", icon: "🎹", type: "triangle" },
@@ -133,10 +148,30 @@ function getActorDisplayState(actor, frameIndex) {
     if (!actor) return { x: 0, y: 0, ci: 0 };
     let x = actor.x, y = actor.y, ci = actor.currentCostume;
     const rec = actor.recordings[actor.recordings.length - 1];
-    const frameData = rec && rec.frames ? rec.frames[frameIndex] : null;
     
     if (state.ui.isPlaying || state.ui.isRecording) {
-        if (frameData) { x = frameData.x; y = frameData.y; ci = frameData.costumeIndex; }
+        if (rec && rec.frames) {
+            if (rec.frames[frameIndex]) {
+                const frameData = rec.frames[frameIndex];
+                x = frameData.x; y = frameData.y; ci = frameData.costumeIndex;
+            } else {
+                // Find last available frame
+                let lastIdx = -1;
+                if (Array.isArray(rec.frames)) {
+                    for (let i = frameIndex - 1; i >= 0; i--) {
+                        if (rec.frames[i]) { lastIdx = i; break; }
+                    }
+                } else {
+                    const keys = Object.keys(rec.frames).map(Number).filter(k => k < frameIndex);
+                    if (keys.length > 0) lastIdx = Math.max(...keys);
+                }
+                
+                if (lastIdx !== -1) {
+                    const lastFrame = rec.frames[lastIdx];
+                    x = lastFrame.x; y = lastFrame.y; ci = lastFrame.costumeIndex;
+                }
+            }
+        }
     } else if (rec && rec.frames?.length > 0) {
         const first = rec.frames[0];
         if (first) { x = first.x; y = first.y; ci = first.costumeIndex; }
@@ -203,15 +238,15 @@ function renderLoop() {
             if (!state.ui.isTitleCardActive) {
                 const song = scene.songId ? state.project.songs.find(s => s.id === scene.songId) : null;
                 if (song) {
-                    const framesPerSub = (60 * FPS) / (song.bpm * 2); 
-                    const songFrame = state.ui.currentFrame + state.ui.songFrameOffset;
-                    const currentSub = Math.floor(songFrame / framesPerSub);
-                    const lastSub = state.ui.currentFrame === 0 ? -1 : Math.floor((songFrame - 1) / framesPerSub);
+                    const msPerSub = 30000 / song.bpm;
+                    const totalElapsedMs = (state.ui.currentFrame + state.ui.songFrameOffset) * FRAME_DURATION;
+                    const currentSub = Math.floor(totalElapsedMs / msPerSub);
 
-                    if (currentSub !== lastSub) {
+                    if (currentSub !== state.ui.lastTriggeredSub) {
                         const loopSub = currentSub % (song.bars * 8);
                         if (state.ui.isExporting) console.log(`[MUSIC] Triggering notes for sub=${loopSub} (frame=${state.ui.currentFrame})`);
                         ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
+                        state.ui.lastTriggeredSub = currentSub;
                     }
                 }
             }
@@ -383,7 +418,13 @@ function drawBoilingText(ctx, text, x, y, color) {
 }
 
 function updateProgressBarUI(currentFrame, maxFrames) {
-    const scenes = state.project.scenes, durations = scenes.map(s => getMaxFrames(s) || 30), total = durations.reduce((a, b) => a + b, 0);
+    const scenes = state.project.scenes, durations = scenes.map((s, idx) => {
+        let dur = getMaxFrames(s) || 30;
+        if (state.ui.isRecording && idx === state.project.currentSceneIndex) {
+            dur = Math.max(dur, currentFrame);
+        }
+        return dur;
+    }), total = durations.reduce((a, b) => a + b, 0);
     progressContainer.innerHTML = '';
     durations.forEach((dur, i) => {
         const wp = (dur / total) * 100, seg = document.createElement('div'); seg.className = 'movie-progress-segment'; seg.style.width = wp + '%';
@@ -738,6 +779,7 @@ function togglePlayback(asTheater, startFromBeginning) {
         document.getElementById('play-btn').textContent = '⏹️'; document.getElementById('play-group').classList.add('is-playing');
         state.ui.currentFrame = 0;
         state.ui.songFrameOffset = 0;
+        state.ui.lastTriggeredSub = -1;
         state.ui.lastFrameTime = performance.now();
         state.ui.timeAccumulator = 0;
         if (!state.ui.isTitleCardActive) playAllAudio();
@@ -1032,9 +1074,10 @@ function startSongPreview() {
         state.ui.lastPreviewTime = now;
 
         while (state.ui.previewAccumulator >= FRAME_DURATION) {
-            const framesPerSub = (60 * FPS) / (song.bpm * 2);
-            const currentSub = Math.floor(state.ui.previewFrame / framesPerSub);
-            const lastSub = state.ui.previewFrame === 0 ? -1 : Math.floor((state.ui.previewFrame - 1) / framesPerSub);
+            const msPerSub = 30000 / song.bpm;
+            const totalElapsedMs = state.ui.previewFrame * FRAME_DURATION;
+            const currentSub = Math.floor(totalElapsedMs / msPerSub);
+            const lastSub = state.ui.previewFrame === 0 ? -1 : Math.floor(((state.ui.previewFrame - 1) * FRAME_DURATION) / msPerSub);
 
             if (currentSub !== lastSub) {
                 const loopSub = currentSub % (song.bars * 8);
@@ -1072,9 +1115,16 @@ function openSongStudio(song) {
     nameInput.value = song.name;
     nameInput.oninput = (e) => { song.name = e.target.value; renderSoundtrackPanel(); saveProject(); };
     
-    const bpmInput = document.getElementById('studio-bpm');
-    bpmInput.value = song.bpm;
-    bpmInput.oninput = (e) => { song.bpm = parseInt(e.target.value) || 120; saveProject(); };
+    const bpmSelect = document.getElementById('studio-bpm');
+    bpmSelect.innerHTML = '';
+    SPEED_PRESETS.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.bpm;
+        opt.textContent = `${p.label} (${p.bpm})`;
+        if (song.bpm === p.bpm) opt.selected = true;
+        bpmSelect.appendChild(opt);
+    });
+    bpmSelect.onchange = (e) => { song.bpm = parseInt(e.target.value); saveProject(); };
     
     const keySelect = document.getElementById('studio-key');
     keySelect.innerHTML = '';
@@ -1098,10 +1148,17 @@ function openSongStudio(song) {
     });
     scaleSelect.onchange = (e) => { song.scale = e.target.value; saveProject(); };
     
-    const barsInput = document.getElementById('studio-bars');
-    barsInput.value = song.bars;
-    barsInput.oninput = (e) => { 
-        song.bars = parseInt(e.target.value) || 4; 
+    const barsSelect = document.getElementById('studio-bars');
+    barsSelect.innerHTML = '';
+    LENGTH_PRESETS.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.bars;
+        opt.textContent = `${p.label} (${p.bars})`;
+        if (song.bars === p.bars) opt.selected = true;
+        barsSelect.appendChild(opt);
+    });
+    barsSelect.onchange = (e) => { 
+        song.bars = parseInt(e.target.value); 
         renderSongStudioGrid();
         saveProject(); 
     };
@@ -1130,16 +1187,17 @@ function renderSongStudioGrid() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     // Draw grid
-    ctx.strokeStyle = '#eee';
-    ctx.lineWidth = 1;
-    
     for (let i = 0; i <= colCount; i++) {
         ctx.beginPath();
         ctx.moveTo(i * cellW, 0);
         ctx.lineTo(i * cellW, canvas.height);
-        if (i % 8 === 0) ctx.strokeStyle = '#ccc';
-        else if (i % 2 === 0) ctx.strokeStyle = '#ddd';
-        else ctx.strokeStyle = '#eee';
+        if (i % 8 === 0) {
+            ctx.strokeStyle = '#000'; // Solid black for bars
+            ctx.lineWidth = 1;
+        } else {
+            ctx.strokeStyle = '#eee'; // Light gray for beats
+            ctx.lineWidth = 0.5;
+        }
         ctx.stroke();
     }
     
@@ -1148,27 +1206,35 @@ function renderSongStudioGrid() {
         ctx.moveTo(0, i * cellH);
         ctx.lineTo(canvas.width, i * cellH);
         ctx.strokeStyle = '#eee';
+        ctx.lineWidth = 0.5;
         ctx.stroke();
     }
     
     // Draw notes for active track
     const trackColors = { lead: '#4a90e2', chords: '#ff00ff', bass: '#7ed321', drums: '#ffff00' };
     const track = song.tracks[state.ui.activeTrack];
-    ctx.fillStyle = trackColors[state.ui.activeTrack];
     
     Object.entries(track.notes).forEach(([col, degrees]) => {
         if (!Array.isArray(degrees)) return;
         degrees.forEach(degree => {
             const x = parseInt(col) * cellW;
             const y = (13 - degree) * cellH;
+            
+            // Fill
+            ctx.fillStyle = trackColors[state.ui.activeTrack];
             ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
+            
+            // Outline
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 1, y + 1, cellW - 2, cellH - 2);
         });
     });
 
     // Playhead (if previewing)
     if (state.ui.isPreviewPlaying) {
-        const framesPerSub = (60 * FPS) / (song.bpm * 2);
-        const currentSub = Math.floor(state.ui.previewFrame / framesPerSub) % (song.bars * 8);
+        const msPerSub = 30000 / song.bpm;
+        const currentSub = Math.floor((state.ui.previewFrame * FRAME_DURATION) / msPerSub) % (song.bars * 8);
         ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
         ctx.fillRect(currentSub * cellW, 0, cellW, canvas.height);
     }
