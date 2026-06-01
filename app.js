@@ -14,7 +14,7 @@ const state = {
         endCardEnabled: false,
         endCardText: "Fin.",
         endCardTextColor: "#ffffff",
-        endCardTintColor: "#808080",
+        endCardTintColor: "#ffffff",
         endSongId: null,
         songs: []
     },
@@ -1904,7 +1904,7 @@ async function loadProject() {
     state.project.endCardEnabled = p.endCardEnabled || false;
     state.project.endCardText = p.endCardText || "Fin.";
     state.project.endCardTextColor = p.endCardTextColor || "#ffffff";
-    state.project.endCardTintColor = p.endCardTintColor || "#808080";
+    state.project.endCardTintColor = p.endCardTintColor || "#ffffff";
     state.project.endSongId = p.endSongId || null;
     state.project.songs = (p.songs || []).map(song => {        if (song.tracks) {
             for (const trackName in song.tracks) {
@@ -1968,7 +1968,7 @@ function importDragFile(e) {
             state.project.endCardEnabled = p.endCardEnabled || false;
             state.project.endCardText = p.endCardText || "Fin.";
             state.project.endCardTextColor = p.endCardTextColor || "#ffffff";
-            state.project.endCardTintColor = p.endCardTintColor || "#808080";
+            state.project.endCardTintColor = p.endCardTintColor || "#ffffff";
             state.project.endSongId = p.endSongId || null;
             state.project.songs = p.songs || [];
             state.project.scenes = await Promise.all(p.scenes.map(async s => ({ 
