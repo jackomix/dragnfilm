@@ -45,7 +45,10 @@ const state = {
         previewAccumulator: 0,
         lastTriggeredSub: -1,
         cameraStream: null,
-        cameraBackup: null
+        cameraBackup: null,
+        isGridDragging: false,
+        gridDragMode: null, // 'paint' or 'erase'
+        lastGridCell: null // { col, row }
     },
     countdownTimer: null
 };
@@ -76,10 +79,13 @@ const LENGTH_PRESETS = [
 ];
 
 const instruments = {
-    piano: { name: "Piano", icon: "🎹", type: "triangle" },
-    synth: { name: "Synth", icon: "🔊", type: "sawtooth" },
-    flute: { name: "Flute", icon: "🌬️", type: "sine" },
-    bell: { name: "Bell", icon: "🔔", type: "square" }
+    piano: { name: "Piano", icon: "🎹", type: "triangle", attack: 0.005, decay: 0.15, sustain: 0.3, release: 0.4 },
+    synth: { name: "Synth", icon: "🔊", type: "sawtooth", attack: 0.02, decay: 0.1, sustain: 0.5, release: 0.1 },
+    flute: { name: "Flute", icon: "🌬️", type: "sine", attack: 0.1, decay: 0.1, sustain: 0.8, release: 0.2 },
+    bell: { name: "Bell", icon: "🔔", type: "square", attack: 0.002, decay: 0.1, sustain: 0.1, release: 1.5 },
+    organ: { name: "Organ", icon: "🎹", type: "sawtooth", attack: 0.01, decay: 0.0, sustain: 1.0, release: 0.05 },
+    strings: { name: "Strings", icon: "🎻", type: "sawtooth", attack: 0.1, decay: 0.2, sustain: 0.4, release: 1.5 },
+    guitar: { name: "Guitar", icon: "🎸", type: "triangle", attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.8 }
 };
 
 const stage = document.getElementById('stage');
@@ -596,6 +602,7 @@ function bindEvents() {
             state.ui.activeTrack = btn.dataset.track;
             document.querySelectorAll('.inst-tab').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            updateInstrumentSelect();
             renderSongStudioGrid();
         };
     });
@@ -604,48 +611,74 @@ function bindEvents() {
         else startSongPreview();
     };
     const canvas = document.getElementById('studio-grid-canvas');
-    canvas.onclick = (e) => {
+
+    function handleStudioGridInput(e) {
         const songId = state.ui.activeSongId;
         if (!songId) return;
         const song = state.project.songs.find(s => s.id === songId);
         if (!song) return;
-        
+
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-        
+
         const colCount = song.bars * 8;
-        const rowCount = 14;
+        const rowCount = 15;
         const cellW = canvas.width / colCount;
         const cellH = canvas.height / rowCount;
-        
-        const col = Math.floor(x / cellW);
-        const row = Math.floor(y / cellH);
-        
+
+        const col = Math.floor(x / (rect.width / colCount));
+        const row = Math.floor(y / (rect.height / rowCount));
+
         if (col >= 0 && col < colCount && row >= 0 && row < rowCount) {
-            const degree = 13 - row;
+            const degree = 14 - row;
             const track = song.tracks[state.ui.activeTrack];
-            if (!track.notes[col]) track.notes[col] = [];
-            
-            const idx = track.notes[col].indexOf(degree);
-            if (idx === -1) {
-                track.notes[col].push(degree);
-                // Preview note
-                if (state.ui.activeTrack === 'drums') {
-                    playDrum(degree);
-                } else {
-                    const octaveOffset = state.ui.activeTrack === 'bass' ? -2 : (state.ui.activeTrack === 'lead' ? 1 : 0);
-                    const freq = getFrequencyForDegree(degree, song.key, song.scale, octaveOffset);
-                    playSynth(freq, track.instrument, state.ui.activeTrack === 'chords');
-                }
-            } else {
-                track.notes[col].splice(idx, 1);
-                if (track.notes[col].length === 0) delete track.notes[col];
+
+            if (e.type === 'mousedown') {
+                state.ui.isGridDragging = true;
+                const idx = track.notes[col]?.indexOf(degree) ?? -1;
+                state.ui.gridDragMode = (idx === -1) ? 'paint' : 'erase';
+                state.ui.lastGridCell = { col, row };
+                applyGridAction(track, col, degree, song);
+            } else if (e.type === 'mousemove' && state.ui.isGridDragging) {
+                if (state.ui.lastGridCell && state.ui.lastGridCell.col === col && state.ui.lastGridCell.row === row) return;
+                state.ui.lastGridCell = { col, row };
+                applyGridAction(track, col, degree, song);
             }
-            renderSongStudioGrid();
-            saveProject();
         }
-    };
+    }
+
+    function applyGridAction(track, col, degree, song) {
+        if (!track.notes[col]) track.notes[col] = [];
+        const idx = track.notes[col].indexOf(degree);
+        const echo = !!track.echo;
+
+        if (state.ui.gridDragMode === 'paint' && idx === -1) {
+            track.notes[col].push(degree);
+            // Preview note
+            if (state.ui.activeTrack === 'drums') {
+                playDrum(degree, null, null, echo);
+            } else {
+                const octaveOffset = state.ui.activeTrack === 'bass' ? -2 : (state.ui.activeTrack === 'lead' ? 1 : (state.ui.activeTrack === 'chords' ? -1 : 0));
+                const freq = getFrequencyForDegree(degree, song.key, song.scale, octaveOffset);
+                playSynth(freq, track.instrument, state.ui.activeTrack === 'chords', null, null, 0.3, echo);
+            }
+        } else if (state.ui.gridDragMode === 'erase' && idx !== -1) {
+            track.notes[col].splice(idx, 1);
+            if (track.notes[col].length === 0) delete track.notes[col];
+        }
+
+        renderSongStudioGrid();
+        saveProject();
+    }
+
+    canvas.onmousedown = handleStudioGridInput;
+    window.addEventListener('mousemove', handleStudioGridInput);
+    window.addEventListener('mouseup', () => {
+        state.ui.isGridDragging = false;
+        state.ui.gridDragMode = null;
+        state.ui.lastGridCell = null;
+    });
     updateBrush();
 }
 
@@ -790,32 +823,41 @@ function togglePlayback(asTheater, startFromBeginning) {
 function getFrequencyForDegree(degree, key, scale, octaveOffset) {
     const rootHz = { "C": 261.63, "C#": 277.18, "D": 293.66, "D#": 311.13, "E": 329.63, "F": 349.23, "F#": 369.99, "G": 392.00, "G#": 415.30, "A": 440.00, "A#": 466.16, "B": 493.88 };
     const intervals = scales[scale] || [0, 2, 4, 5, 7, 9, 11];
-    const octave = Math.floor(degree / 7) + octaveOffset;
-    const interval = intervals[degree % 7];
+    const scaleLen = intervals.length;
+    const octave = Math.floor(degree / scaleLen) + octaveOffset;
+    const interval = intervals[degree % scaleLen];
     return rootHz[key] * Math.pow(2, octave + interval / 12);
 }
 
 function triggerSongNote(song, trackName, subdivisionIndex, ctx = null, dest = null) {
-    const degrees = song.tracks[trackName].notes[subdivisionIndex];
+    const track = song.tracks[trackName];
+    const degrees = track.notes[subdivisionIndex];
     if (!degrees || !Array.isArray(degrees)) return;
-    
+
+    const duration = 30000 / song.bpm / 1000;
+    const echo = !!track.echo;
+
     degrees.forEach(degree => {
         if (trackName === 'drums') {
-            playDrum(degree, ctx, dest);
+            playDrum(degree, ctx, dest, echo);
         } else {
-            const octaveOffset = trackName === 'bass' ? -2 : (trackName === 'lead' ? 1 : 0);
+            const octaveOffset = trackName === 'bass' ? -2 : (trackName === 'lead' ? 1 : (trackName === 'chords' ? -1 : 0));
             const freq = getFrequencyForDegree(degree, song.key, song.scale, octaveOffset);
-            playSynth(freq, song.tracks[trackName].instrument, trackName === 'chords', ctx, dest);
+            playSynth(freq, track.instrument, trackName === 'chords', ctx, dest, duration, echo);
         }
     });
 }
 
-function playSynth(freq, instrumentName, isChord, ctx = null, dest = null) {
+function playSynth(freq, instrumentName, isChord, ctx = null, dest = null, duration = 0.2, useEcho = false) {
     const activeCtx = ctx || audioContext || (audioContext = new (window.AudioContext || window.webkitAudioContext)());
     if (activeCtx.state === 'suspended') activeCtx.resume();
     
     const inst = instruments[instrumentName] || instruments.synth;
     const freqs = isChord ? [freq, freq * Math.pow(2, 4/12), freq * Math.pow(2, 7/12)] : [freq];
+    
+    const maxGain = 0.2;
+    const now = activeCtx.currentTime;
+    const target = dest || activeCtx.destination;
     
     freqs.forEach(f => {
         const osc = activeCtx.createOscillator();
@@ -824,51 +866,166 @@ function playSynth(freq, instrumentName, isChord, ctx = null, dest = null) {
         osc.type = inst.type || 'sawtooth';
         
         osc.connect(gain);
-        const target = dest || activeCtx.destination;
         gain.connect(target);
+        
+        if (useEcho) {
+            const delay = activeCtx.createDelay();
+            delay.delayTime.value = 0.3;
+            const feedback = activeCtx.createGain();
+            feedback.gain.value = 0.4;
+            
+            gain.connect(delay);
+            delay.connect(feedback);
+            feedback.connect(delay);
+            feedback.connect(target);
+        }
+
         if (!dest && musicDest) gain.connect(musicDest);
+        if (state.ui.isRecording && state.ui.exportDest) gain.connect(state.ui.exportDest);
         if (state.ui.isExporting && state.ui.exportDest) gain.connect(state.ui.exportDest);
         
-        const now = activeCtx.currentTime;
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-        osc.start(); osc.stop(now + 0.5);
+        // ADSR Envelope
+        const attack = inst.attack || 0.05;
+        const decay = inst.decay || 0.1;
+        const sustain = inst.sustain || 0.5;
+        const release = inst.release || 0.2;
+        
+        gain.gain.setValueAtTime(0, now);
+        // Attack
+        gain.gain.linearRampToValueAtTime(maxGain, now + attack);
+        // Decay to Sustain
+        gain.gain.linearRampToValueAtTime(maxGain * sustain, now + attack + decay);
+        
+        // Release starts after duration
+        const releaseStart = now + Math.max(attack + decay, duration);
+        gain.gain.setValueAtTime(maxGain * sustain, releaseStart);
+        
+        // Two-stage release: quick drop to 5%, then long tail
+        const quickDropTime = releaseStart + (release * 0.1);
+        gain.gain.exponentialRampToValueAtTime(maxGain * 0.05, quickDropTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, releaseStart + release);
+        
+        osc.start(now);
+        osc.stop(releaseStart + release);
     });
 }
 
-function playDrum(degree, ctx = null, dest = null) {
+function createNoiseBuffer(ctx) {
+    const bufferSize = ctx.sampleRate * 2;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+    return buffer;
+}
+
+function playDrum(degree, ctx = null, dest = null, useEcho = false) {
     const activeCtx = ctx || audioContext || (audioContext = new (window.AudioContext || window.webkitAudioContext)());
     if (activeCtx.state === 'suspended') activeCtx.resume();
     
-    const osc = activeCtx.createOscillator();
-    const gain = activeCtx.createGain();
-    
-    osc.connect(gain);
-    const target = dest || activeCtx.destination;
-    gain.connect(target);
-    if (!dest && musicDest) gain.connect(musicDest);
-    if (state.ui.isExporting && state.ui.exportDest) gain.connect(state.ui.exportDest);
-    
     const now = activeCtx.currentTime;
+    const target = dest || activeCtx.destination;
     
-    if (degree < 4) { // Kick
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.exponentialRampToValueAtTime(0.001, now + 0.5);
-        gain.gain.setValueAtTime(0.5, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-    } else if (degree < 8) { // Snare
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(250, now);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-    } else { // Hihat
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(1000, now);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    const connectToOutput = (node) => {
+        node.connect(target);
+        
+        if (useEcho) {
+            const delay = activeCtx.createDelay();
+            delay.delayTime.value = 0.3;
+            const feedback = activeCtx.createGain();
+            feedback.gain.value = 0.3;
+            
+            node.connect(delay);
+            delay.connect(feedback);
+            feedback.connect(delay);
+            feedback.connect(target);
+        }
+
+        if (!dest && musicDest) node.connect(musicDest);
+        if (state.ui.isRecording && state.ui.exportDest) node.connect(state.ui.exportDest);
+        if (state.ui.isExporting && state.ui.exportDest) node.connect(state.ui.exportDest);
+    };
+
+    const playSineHit = (freq, sweep, decay, vol = 1.0) => {
+        const osc = activeCtx.createOscillator();
+        const gain = activeCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.exponentialRampToValueAtTime(sweep, now + decay);
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
+        osc.connect(gain);
+        connectToOutput(gain);
+        osc.start(now);
+        osc.stop(now + decay);
+    };
+
+    const playNoiseHit = (filterType, filterFreq, decay, vol = 0.5) => {
+        const noise = activeCtx.createBufferSource();
+        noise.buffer = createNoiseBuffer(activeCtx);
+        const filter = activeCtx.createBiquadFilter();
+        filter.type = filterType;
+        filter.frequency.value = filterFreq;
+        const gain = activeCtx.createGain();
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
+        noise.connect(filter);
+        filter.connect(gain);
+        connectToOutput(gain);
+        noise.start(now);
+        noise.stop(now + decay);
+    };
+
+    if (degree === 0) { // 808 Kick
+        playSineHit(150, 40, 0.5, 1.0);
+    } else if (degree === 1) { // 808 Snare
+        playSineHit(180, 100, 0.1, 0.3);
+        playNoiseHit('highpass', 1000, 0.2, 0.5);
+    } else if (degree === 2) { // Closed Hat
+        playNoiseHit('bandpass', 10000, 0.05, 0.2);
+    } else if (degree === 3) { // Open Hat
+        playNoiseHit('bandpass', 10000, 0.3, 0.2);
+    } else if (degree === 4) { // Claves
+        playSineHit(2500, 2400, 0.1, 0.4);
+    } else if (degree === 5) { // Handclap
+        for(let i=0; i<3; i++) {
+            const delay = i * 0.01;
+            const g = activeCtx.createGain();
+            g.gain.setValueAtTime(0, now + delay);
+            g.gain.linearRampToValueAtTime(0.3, now + delay + 0.001);
+            g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.05);
+            const noise = activeCtx.createBufferSource();
+            noise.buffer = createNoiseBuffer(activeCtx);
+            const f = activeCtx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1200;
+            noise.connect(f); f.connect(g); connectToOutput(g);
+            noise.start(now + delay); noise.stop(now + delay + 0.05);
+        }
+    } else if (degree === 6) { // Cowbell
+        [800, 540].forEach(f => {
+            const osc = activeCtx.createOscillator();
+            const gain = activeCtx.createGain();
+            osc.type = 'square'; osc.frequency.value = f;
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.connect(gain); connectToOutput(gain);
+            osc.start(now); osc.stop(now + 0.3);
+        });
+    } else if (degree === 7) { // Maracas
+        playNoiseHit('highpass', 5000, 0.05, 0.2);
+    } else if (degree === 8) { // Cymbal
+        playNoiseHit('highpass', 3000, 1.0, 0.2);
+    } else if (degree === 9) { // Low Tom
+        playSineHit(100, 60, 0.4, 0.6);
+    } else if (degree === 10) { // Mid Tom
+        playSineHit(150, 100, 0.4, 0.6);
+    } else if (degree === 11) { // High Tom
+        playSineHit(200, 140, 0.4, 0.6);
+    } else if (degree === 12) { // Low Conga
+        playSineHit(200, 180, 0.2, 0.5);
+    } else if (degree === 13) { // Mid Conga
+        playSineHit(300, 270, 0.2, 0.5);
+    } else if (degree === 14) { // High Conga
+        playSineHit(450, 420, 0.2, 0.5);
     }
-    
-    osc.start(); osc.stop(now + 0.5);
 }
 
 function playAllAudio() {
@@ -916,6 +1073,7 @@ function updatePanelVisibility() {
  const isBD = state.ui.editingTarget.id === 'backdrop'; const cs = document.querySelector('.canvas-sizes'); if (cs) cs.classList.toggle('hidden', isBD); const trans = document.querySelector('.color-swatch.transparent'); if (trans) { trans.classList.toggle('hidden', isBD); if (isBD && state.ui.currentColor === 'transparent') { state.ui.currentColor = '#000000'; setupPalette(); } } }
     document.getElementById('file-btn').classList.toggle('active', state.ui.activePanel === 'file');
     document.getElementById('scene-btn').classList.toggle('active', state.ui.activePanel === 'movie');
+    document.getElementById('instruments-btn').classList.toggle('active', state.ui.activePanel === 'soundtrack' || state.ui.activePanel === 'songEditor');
     document.getElementById('list-toggle-btn').classList.toggle('active', state.ui.activePanel === 'list' || state.ui.activePanel === 'editor');
 }
 
@@ -1031,10 +1189,10 @@ function addSong() {
         scale: 'major',
         bars: 4,
         tracks: {
-            lead: { instrument: 'piano', notes: {} },
-            chords: { instrument: 'synth', notes: {} },
-            bass: { instrument: 'synth', notes: {} },
-            drums: { instrument: 'drum', notes: {} }
+            lead: { instrument: 'piano', notes: {}, echo: false },
+            chords: { instrument: 'synth', notes: {}, echo: false },
+            bass: { instrument: 'synth', notes: {}, echo: false },
+            drums: { instrument: 'drum', notes: {}, echo: false }
         }
     };
     state.project.songs.push(song);
@@ -1109,26 +1267,77 @@ function toggleSongPreview() {
     else startSongPreview();
 }
 
+function updateSongEditorPanelWidth(bars) {
+    const panel = document.getElementById('song-editor-panel');
+    if (bars <= 4) {
+        panel.style.width = '1020px';
+    } else {
+        panel.style.width = '95vw';
+    }
+}
+
+function updateInstrumentSelect() {
+    const songId = state.ui.activeSongId;
+    if (!songId) return;
+    const song = state.project.songs.find(s => s.id === songId);
+    if (!song) return;
+
+    const select = document.getElementById('studio-track-instrument');
+    select.innerHTML = '';
+    
+    if (state.ui.activeTrack === 'drums') {
+        const opt = document.createElement('option');
+        opt.value = 'drums';
+        opt.textContent = 'Standard Kit';
+        select.appendChild(opt);
+        select.disabled = true;
+    } else {
+        select.disabled = false;
+        Object.entries(instruments).forEach(([id, inst]) => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = `${inst.icon} ${inst.name}`;
+            if (song.tracks[state.ui.activeTrack].instrument === id) opt.selected = true;
+            select.appendChild(opt);
+        });
+    }
+    
+    select.onchange = (e) => {
+        song.tracks[state.ui.activeTrack].instrument = e.target.value;
+        e.target.blur();
+        saveProject();
+    };
+
+    const echoCheck = document.getElementById('studio-track-echo');
+    echoCheck.checked = !!song.tracks[state.ui.activeTrack].echo;
+    echoCheck.onchange = (e) => {
+        song.tracks[state.ui.activeTrack].echo = e.target.checked;
+        e.target.blur();
+        saveProject();
+    };
+}
+
 function openSongStudio(song) {
     if (state.ui.isPreviewPlaying) stopSongPreview();
     state.ui.activeSongId = song.id;
     state.ui.activePanel = 'songEditor';
     updatePanelVisibility();
     
-    const nameInput = document.getElementById('studio-song-name');
-    nameInput.value = song.name;
-    nameInput.oninput = (e) => { song.name = e.target.value; renderSoundtrackPanel(); saveProject(); };
+    updateSongEditorPanelWidth(song.bars);
+    updateInstrumentSelect();
+    
+    document.getElementById('studio-song-name').textContent = song.name;
     
     const bpmSelect = document.getElementById('studio-bpm');
     bpmSelect.innerHTML = '';
     SPEED_PRESETS.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p.bpm;
-        opt.textContent = `${p.label} (${p.bpm})`;
+        opt.textContent = `${p.label}`;
         if (song.bpm === p.bpm) opt.selected = true;
         bpmSelect.appendChild(opt);
     });
-    bpmSelect.onchange = (e) => { song.bpm = parseInt(e.target.value); saveProject(); };
+    bpmSelect.onchange = (e) => { song.bpm = parseInt(e.target.value); e.target.blur(); saveProject(); };
     
     const keySelect = document.getElementById('studio-key');
     keySelect.innerHTML = '';
@@ -1139,7 +1348,7 @@ function openSongStudio(song) {
         if (song.key === k) opt.selected = true;
         keySelect.appendChild(opt);
     });
-    keySelect.onchange = (e) => { song.key = e.target.value; saveProject(); };
+    keySelect.onchange = (e) => { song.key = e.target.value; e.target.blur(); saveProject(); };
     
     const scaleSelect = document.getElementById('studio-scale');
     scaleSelect.innerHTML = '';
@@ -1150,20 +1359,22 @@ function openSongStudio(song) {
         if (song.scale === s) opt.selected = true;
         scaleSelect.appendChild(opt);
     });
-    scaleSelect.onchange = (e) => { song.scale = e.target.value; saveProject(); };
+    scaleSelect.onchange = (e) => { song.scale = e.target.value; e.target.blur(); saveProject(); };
     
     const barsSelect = document.getElementById('studio-bars');
     barsSelect.innerHTML = '';
     LENGTH_PRESETS.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p.bars;
-        opt.textContent = `${p.label} (${p.bars})`;
+        opt.textContent = `${p.label}`;
         if (song.bars === p.bars) opt.selected = true;
         barsSelect.appendChild(opt);
     });
     barsSelect.onchange = (e) => { 
         song.bars = parseInt(e.target.value); 
+        updateSongEditorPanelWidth(song.bars);
         renderSongStudioGrid();
+        e.target.blur();
         saveProject(); 
     };
     
@@ -1178,12 +1389,17 @@ function renderSongStudioGrid() {
     
     const canvas = document.getElementById('studio-grid-canvas');
     const wrap = canvas.parentElement;
-    canvas.width = wrap.clientWidth;
+    
+    const colCount = song.bars * 8;
+    const rowCount = 15;
+    
+    // Allow Long (8 bars) to fit the screen (slightly squished), 
+    // but make anything longer (Epic) scroll at that same cell size.
+    const scrollFactor = Math.max(1, song.bars / 8);
+    canvas.width = wrap.clientWidth * scrollFactor;
     canvas.height = wrap.clientHeight;
     
     const ctx = canvas.getContext('2d');
-    const colCount = song.bars * 8;
-    const rowCount = 14;
     const cellW = canvas.width / colCount;
     const cellH = canvas.height / rowCount;
     
@@ -1222,7 +1438,7 @@ function renderSongStudioGrid() {
         if (!Array.isArray(degrees)) return;
         degrees.forEach(degree => {
             const x = parseInt(col) * cellW;
-            const y = (13 - degree) * cellH;
+            const y = (14 - degree) * cellH;
             
             // Fill
             ctx.fillStyle = trackColors[state.ui.activeTrack];

@@ -14,8 +14,11 @@ body.theater-mode {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    width: 100vw;
     align-items: center;
     justify-content: center;
+    position: relative;
+    z-index: 1;
 }
 
 #canvas-container {
@@ -98,14 +101,15 @@ canvas {
 
 /* Progress Bar */
 #progress-container {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
-    height: 12px; /* Doubled thickness from 6px */
-    background: transparent; /* Track is defined by segment borders */
+    height: 12px;
+    background: #eee;
     z-index: 300;
     display: flex;
+    border-bottom: 1px solid black;
 }
 
 #progress-bar {
@@ -510,24 +514,31 @@ button:disabled {
 }
 
 #song-editor-panel {
-    width: 800px;
-    max-height: 500px; /* Increased slightly for better layout */
-}
-
-.song-editor-header {
+    width: 1020px;
+    height: 500px;
     display: flex;
-    align-items: center;
-    width: 100%;
-    padding: 10px; /* More padding like other panels */
-    border-bottom: 1px solid black;
-    background: white;
+    flex-direction: column;
 }
 
 .song-editor-controls {
-    margin-left: auto;
     display: flex;
+    justify-content: space-between;
     gap: 15px; /* Increased gap */
     align-items: center;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.song-editor-controls .song-editor-instrument-controls,
+.song-editor-controls .song-editor-song-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.song-editor-controls .song-editor-song-controls {
+    justify-content: flex-end;
+    flex: 1;
 }
 
 .song-editor-controls select {
@@ -538,16 +549,7 @@ button:disabled {
     font-size: 13px;
     cursor: pointer;
     border-radius: 0;
-    min-width: 100px; /* Ensure labels don't cut off */
-}
-
-#studio-song-name {
-    font-size: 18px;
-    font-weight: bold;
-    border: none;
-    outline: none;
-    background: transparent;
-    padding: 0;
+    min-width: 80px; /* Ensure labels don't cut off */
 }
 
 #studio-bpm { width: 50px; }
@@ -558,37 +560,41 @@ button:disabled {
 .song-editor-layout {
     display: flex;
     gap: 0;
-    flex: 1;
+    height: 400px; /* Fixed height for the whole editing area */
     overflow: hidden;
     background: white;
+    border-top: 1px solid black; /* Separator from controls */
+    border-bottom: 1px solid black; /* Bottom edge of the editor */
 }
 
 .instrument-sidebar {
-    width: 100px; /* Widened from 60px */
+    width: 100px;
     display: flex;
     flex-direction: column;
     gap: 0;
-    border-right: 1px solid #000;
     background: white;
 }
 
 .inst-tab {
     padding: 10px 5px;
     width: 100%;
-    height: auto; /* Allow height to fit content */
-    min-height: 80px;
+    flex: 1; 
     font-size: 14px;
     text-align: center;
     background: white;
     border: 1px solid #000;
+    border-bottom: none; /* Let the container handle the bottom or next tab handle top */
     cursor: pointer;
     box-sizing: border-box;
-    margin-bottom: -1px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 5px;
+}
+
+.inst-tab:last-child {
+    border-bottom: none; /* Bottom border handled by .song-editor-layout */
 }
 
 .inst-tab span {
@@ -601,11 +607,32 @@ button:disabled {
     font-weight: bold;
     box-shadow: inset 2px 2px 0 rgba(0,0,0,0.2);
 }
-    .piano-roll-wrap {
-        flex: 1;
-        position: relative;
-        overflow: auto;
-    }
+
+.piano-roll-wrap {
+    flex: 1;
+    height: 400px;
+    position: relative;
+    overflow: auto; /* Enable scrolling for Epic songs */
+    border-left: 1px solid black;
+    background: white;
+}
+
+/* Force visible scrollbar for Chrome/Safari */
+.piano-roll-wrap::-webkit-scrollbar {
+    height: 12px;
+    display: block;
+}
+.piano-roll-wrap::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-top: 1px solid black;
+}
+.piano-roll-wrap::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border: 1px solid black;
+}
+.piano-roll-wrap::-webkit-scrollbar-thumb:hover {
+    background: #bbb;
+}
 #studio-grid-canvas {
     display: block;
     cursor: crosshair;

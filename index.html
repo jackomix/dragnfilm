@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="progress-container"><div id="progress-bar"></div></div>
+    <div id="progress-container"></div>
     <div id="app">
         <div id="canvas-container">
             <canvas id="stage"></canvas>
@@ -86,16 +86,20 @@
             </div>
 
             <div id="song-editor-panel" class="hidden panel">
-                <div class="panel-header">
-                    <input type="text" id="studio-song-name" style="border:none; font-weight:bold; width:150px;">
-                    <div class="song-editor-header">
-                        <div class="song-editor-controls">
-                            <span>Speed: <select id="studio-bpm"></select></span>
-                            <span>Length: <select id="studio-bars"></select></span>
-                            <select id="studio-key"></select>
-                            <select id="studio-scale"></select>
-                            <button id="studio-preview-toggle-btn" class="square-btn" style="width:30px; height:30px; padding:0;">▶️</button>
-                        </div>
+                <div class="panel-header" id="studio-song-name"></div>
+                <div class="song-editor-controls">
+                    <div class="song-editor-instrument-controls">
+                        <span style="font-size: 14px; white-space: nowrap;">Sound: <select id="studio-track-instrument" tabindex="-1"></select></span>
+                        <label style="font-size: 14px; white-space: nowrap; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                            Echo: <input type="checkbox" id="studio-track-echo" tabindex="-1">
+                        </label>
+                    </div>
+                    <div class="song-editor-song-controls">
+                        <span style="font-size: 14px; white-space: nowrap;">Speed: <select id="studio-bpm" tabindex="-1"></select></span>
+                        <span style="font-size: 14px; white-space: nowrap;">Length: <select id="studio-bars" tabindex="-1"></select></span>
+                        <select id="studio-key" tabindex="-1"></select>
+                        <select id="studio-scale" tabindex="-1"></select>
+                        <button id="studio-preview-toggle-btn" class="square-btn" style="width:30px; height:30px; padding:0; font-size: 18px;">▶️</button>
                     </div>
                 </div>
                 <div class="song-editor-layout">
