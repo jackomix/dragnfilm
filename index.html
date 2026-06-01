@@ -87,14 +87,14 @@
 
             <div id="song-editor-panel" class="hidden panel">
                 <div class="panel-header">
-                    <div id="studio-song-name"></div>
+                    <input type="text" id="studio-song-name" style="border:none; font-weight:bold; width:150px;">
                     <div class="song-editor-header">
                         <div class="song-editor-controls">
-                            <span>BPM: <input type="number" id="studio-bpm" value="120"></span>
+                            <span>Speed: <select id="studio-bpm"></select></span>
+                            <span>Length: <select id="studio-bars"></select></span>
                             <select id="studio-key"></select>
                             <select id="studio-scale"></select>
-                            <span>Bars: <input type="number" id="studio-bars" value="4"></span>
-                            <button id="studio-preview-toggle-btn" class="preview-btn">▶️</button>
+                            <button id="studio-preview-toggle-btn" class="square-btn" style="width:30px; height:30px; padding:0;">▶️</button>
                         </div>
                     </div>
                 </div>
