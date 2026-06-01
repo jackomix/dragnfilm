@@ -61,6 +61,19 @@
                         </div>
                     </div>
                     <div class="file-section">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <h3>End Card</h3>
+                            <input type="checkbox" id="show-end-card-checkbox">
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            <input type="text" id="end-card-text-input" placeholder="Fin." style="width: 100%; box-sizing: border-box;">
+                            <div style="display: flex; gap: 10px; margin-top: 8px; align-items: center; font-size: 11px;">
+                                <label>Tint: <input type="color" id="end-card-tint-color" value="#000000"></label>
+                                <label>Text: <input type="color" id="end-card-text-color" value="#ffffff"></label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="file-section">
                         <h3>Scenes</h3>
                         <div id="scene-list-scroll" style="height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 2px;">
                             <div id="scene-list" class="list-container"></div>
@@ -92,6 +105,9 @@
                         <span style="font-size: 14px; white-space: nowrap;">Sound: <select id="studio-track-instrument" tabindex="-1"></select></span>
                         <label style="font-size: 14px; white-space: nowrap; cursor: pointer; display: flex; align-items: center; gap: 4px;">
                             Echo: <input type="checkbox" id="studio-track-echo" tabindex="-1">
+                        </label>
+                        <label style="font-size: 14px; white-space: nowrap; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                            Chorus: <input type="checkbox" id="studio-track-chorus" tabindex="-1">
                         </label>
                     </div>
                     <div class="song-editor-song-controls">

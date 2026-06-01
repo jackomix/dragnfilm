@@ -10,6 +10,12 @@ const state = {
         titleBgColor: "#ffffff",
         titleTextColor: "#000000",
         showTitleCard: true,
+        titleSongId: null,
+        endCardEnabled: false,
+        endCardText: "Fin.",
+        endCardTextColor: "#ffffff",
+        endCardTintColor: "#000000",
+        endSongId: null,
         songs: []
     },
     ui: {
@@ -19,6 +25,7 @@ const state = {
         clipboard: null,
         isRecording: false, isPlaying: false, isTheaterMode: false,
         isTitleCardActive: false,
+        isEndCardActive: false,
         isExporting: false,
         exportRecorder: null,
         exportDest: null,
@@ -133,6 +140,34 @@ function syncMovieInputs() {
     document.getElementById('movie-bg-color').value = state.project.titleBgColor;
     document.getElementById('movie-text-color').value = state.project.titleTextColor;
     document.getElementById('show-title-card-checkbox').checked = state.project.showTitleCard;
+    document.getElementById('show-end-card-checkbox').checked = state.project.endCardEnabled;
+    document.getElementById('end-card-text-input').value = state.project.endCardText;
+    document.getElementById('end-card-text-color').value = state.project.endCardTextColor;
+    document.getElementById('end-card-tint-color').value = state.project.endCardTintColor;
+    populateCardSongSelects();
+}
+
+function populateCardSongSelects() {
+    const titleSelect = document.getElementById('title-song-select');
+    const endSelect = document.getElementById('end-song-select');
+    if (!titleSelect || !endSelect) return;
+    
+    titleSelect.innerHTML = '<option value="">None</option>';
+    endSelect.innerHTML = '<option value="">None</option>';
+    
+    state.project.songs.forEach(song => {
+        const tOpt = document.createElement('option');
+        tOpt.value = song.id;
+        tOpt.textContent = song.name;
+        if (state.project.titleSongId === song.id) tOpt.selected = true;
+        titleSelect.appendChild(tOpt);
+        
+        const eOpt = document.createElement('option');
+        eOpt.value = song.id;
+        eOpt.textContent = song.name;
+        if (state.project.endSongId === song.id) eOpt.selected = true;
+        endSelect.appendChild(eOpt);
+    });
 }
 
 let draggedActor = null, dragOffsetX = 0, dragOffsetY = 0, dragSrcIndex = -1;
@@ -241,19 +276,28 @@ function renderLoop() {
                 }
             }
 
-            if (!state.ui.isTitleCardActive) {
-                const song = scene.songId ? state.project.songs.find(s => s.id === scene.songId) : null;
-                if (song) {
-                    const msPerSub = 30000 / song.bpm;
-                    const totalElapsedMs = (state.ui.currentFrame + state.ui.songFrameOffset) * FRAME_DURATION;
-                    const currentSub = Math.floor(totalElapsedMs / msPerSub);
+            if (state.ui.isTheaterMode && state.ui.isEndCardActive && state.project.endCardEnabled) {
+                if (state.ui.currentFrame >= 120) {
+                    togglePlayback();
+                    return;
+                }
+            }
 
-                    if (currentSub !== state.ui.lastTriggeredSub) {
-                        const loopSub = currentSub % (song.bars * 8);
-                        if (state.ui.isExporting) console.log(`[MUSIC] Triggering notes for sub=${loopSub} (frame=${state.ui.currentFrame})`);
-                        ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub, null, state.ui.isExporting ? state.ui.exportDest : null));
-                        state.ui.lastTriggeredSub = currentSub;
-                    }
+            let activeSongId = scene.songId;
+            if (state.ui.isTitleCardActive) activeSongId = state.project.titleSongId;
+            else if (state.ui.isEndCardActive) activeSongId = state.project.endSongId;
+
+            const song = activeSongId ? state.project.songs.find(s => s.id === activeSongId) : null;
+            if (song) {
+                const msPerSub = 30000 / song.bpm;
+                const totalElapsedMs = (state.ui.currentFrame + state.ui.songFrameOffset) * FRAME_DURATION;
+                const currentSub = Math.floor(totalElapsedMs / msPerSub);
+
+                if (currentSub !== state.ui.lastTriggeredSub) {
+                    const loopSub = currentSub % (song.bars * 8);
+                    if (state.ui.isExporting) console.log(`[MUSIC] Triggering notes for sub=${loopSub} (frame=${state.ui.currentFrame})`);
+                    ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub, null, state.ui.isExporting ? state.ui.exportDest : null));
+                    state.ui.lastTriggeredSub = currentSub;
                 }
             }
 
@@ -317,7 +361,7 @@ function renderLoop() {
 
     const bd = scene.backdrop;
 
-    if (state.ui.isPlaying && state.ui.currentFrame >= maxFrames) {
+    if (state.ui.isPlaying && (!state.ui.isEndCardActive) && state.ui.currentFrame >= maxFrames) {
         if (state.project.currentSceneIndex < state.project.scenes.length - 1 && (!state.ui.isExporting || state.ui.exportFullMovie)) {
             const currentSongId = scene.songId;
             state.project.currentSceneIndex++;
@@ -335,16 +379,24 @@ function renderLoop() {
             state.ui.lastFrameTime = performance.now();
             renderSceneList();
             renderActorList();
+        } else if (state.project.endCardEnabled && (state.ui.isTheaterMode || state.ui.isExporting)) {
+            state.ui.isEndCardActive = true;
+            state.ui.currentFrame = 0;
+            state.ui.lastFrameTime = performance.now();
+            stopAllAudio();
+            state.ui.songFrameOffset = 0;
+            // Music is handled by renderLoop's music trigger
         } else {
             togglePlayback();
         }
     }
 
+    const displayFrame = state.ui.isEndCardActive ? maxFrames - 1 : state.ui.currentFrame;
 
     let bdCostumeIndex = bd.currentCostume;
     const bdRec = bd.recordings[bd.recordings.length - 1];
     if (state.ui.isPlaying || state.ui.isRecording) {
-        if (bdRec) { const frame = bdRec.frames[state.ui.currentFrame]; if (frame) bdCostumeIndex = frame.costumeIndex; }
+        if (bdRec) { const frame = bdRec.frames[displayFrame]; if (frame) bdCostumeIndex = frame.costumeIndex; }
     } else if (bdRec && bdRec.frames?.length > 0) { bdCostumeIndex = bdRec.frames[0].costumeIndex; }
     if (bd.costumes[bdCostumeIndex]) ctx.drawImage(bd.costumes[bdCostumeIndex].canvas, margin, margin);
     
@@ -352,7 +404,7 @@ function renderLoop() {
         ctx.save(); ctx.beginPath(); ctx.rect(0, 0, stage.width, stage.height); ctx.rect(margin, margin, state.project.width, state.project.height); ctx.clip('evenodd');
         for (let i = scene.actors.length - 1; i >= 0; i--) {
             const actor = scene.actors[i];
-            const { x, y, ci } = getActorDisplayState(actor, state.ui.currentFrame);
+            const { x, y, ci } = getActorDisplayState(actor, displayFrame);
             const costume = actor.costumes[ci];
             if (costume) {
                 const dx = margin + x - costume.canvas.width / 2, dy = margin + y - costume.canvas.height / 2;
@@ -366,7 +418,7 @@ function renderLoop() {
 
     for (let i = scene.actors.length - 1; i >= 0; i--) {
         const actor = scene.actors[i];
-        const { x, y, ci } = getActorDisplayState(actor, state.ui.currentFrame);
+        const { x, y, ci } = getActorDisplayState(actor, displayFrame);
         const isSelected = state.ui.selectedActorId === actor.id;
         const costume = actor.costumes[ci];
         if (costume) {
@@ -384,10 +436,41 @@ function renderLoop() {
 
     if (!state.ui.isTheaterMode && !state.ui.isPlaying && state.ui.selectedActorId === 'backdrop') drawSelectionOutline(ctx, margin, margin, state.project.width, state.project.height);
 
-    if (state.ui.isPlaying && state.ui.currentFrame >= maxFrames && state.project.currentSceneIndex === state.project.scenes.length - 1) { ctx.fillStyle = "black"; ctx.font = "bold 20px Arial"; ctx.fillText("Fin.", margin + 10, margin + state.project.height - 15); }
-    
+    if (state.ui.isEndCardActive) {
+        ctx.globalCompositeOperation = "color";
+        ctx.fillStyle = state.project.endCardTintColor;
+        ctx.fillRect(margin, margin, state.project.width, state.project.height);
+        ctx.globalCompositeOperation = "source-over";
+        
+        ctx.fillStyle = state.project.endCardTextColor;
+        ctx.font = `bold 24px "${state.project.fontStyle}"`;
+        ctx.textBaseline = 'bottom';
+        ctx.textAlign = 'left';
+        ctx.fillText(state.project.endCardText, margin + 10, margin + state.project.height - 10);
+    }
+
     if (state.ui.isExporting && state.ui.exportCtx) {
-        renderProjectFrame(state.ui.exportCtx, state.ui.currentFrame, state.ui.exportCanvas.width, state.ui.exportCanvas.height, 4, scene);
+        // Handle export frame rendering
+        let renderFrame = displayFrame;
+        let renderScene = scene;
+        if (state.ui.isTitleCardActive) {
+            // Already handled by drawTitleCard block
+        } else {
+            renderProjectFrame(state.ui.exportCtx, renderFrame, state.ui.exportCanvas.width, state.ui.exportCanvas.height, 4, renderScene);
+            if (state.ui.isEndCardActive) {
+                const expCtx = state.ui.exportCtx;
+                expCtx.globalCompositeOperation = "color";
+                expCtx.fillStyle = state.project.endCardTintColor;
+                expCtx.fillRect(0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
+                expCtx.globalCompositeOperation = "source-over";
+                
+                expCtx.fillStyle = state.project.endCardTextColor;
+                expCtx.font = `bold ${24 * 4}px "${state.project.fontStyle}"`;
+                expCtx.textBaseline = 'bottom';
+                expCtx.textAlign = 'left';
+                expCtx.fillText(state.project.endCardText, 10 * 4, state.ui.exportCanvas.height - 10 * 4);
+            }
+        }
     }
     
     requestAnimationFrame(renderLoop);
@@ -594,7 +677,7 @@ function bindEvents() {
     document.getElementById('camera-btn').onclick = enterCameraMode;
     document.getElementById('camera-capture-btn').onclick = capturePhoto;
     document.getElementById('camera-cancel-btn').onclick = () => exitCameraMode(true);
-    document.getElementById('show-title-card-checkbox').onchange = (e) => { state.project.showTitleCard = e.target.checked; saveProject(); };
+    document.getElementById('show-title-card-checkbox').onchange = (e) => { state.project.showTitleCard = e.target.checked; renderSoundtrackPanel(); saveProject(); };
     const pencilSlider = document.getElementById('pencil-size');
     pencilSlider.onmousedown = () => { updateBrushPreview(); document.getElementById('brush-size-overlay').classList.remove('hidden'); };
     window.addEventListener('mouseup', () => { document.getElementById('brush-size-overlay').classList.add('hidden'); });
@@ -607,6 +690,14 @@ function bindEvents() {
     document.getElementById('movie-font-select').onchange = (e) => { state.project.fontStyle = e.target.value; saveProject(); };
     document.getElementById('movie-bg-color').oninput = (e) => { state.project.titleBgColor = e.target.value; saveProject(); };
     document.getElementById('movie-text-color').oninput = (e) => { state.project.titleTextColor = e.target.value; saveProject(); };
+    
+    document.getElementById('title-song-select').onchange = (e) => { state.project.titleSongId = e.target.value || null; saveProject(); };
+    
+    document.getElementById('show-end-card-checkbox').onchange = (e) => { state.project.endCardEnabled = e.target.checked; renderSoundtrackPanel(); saveProject(); };
+    document.getElementById('end-card-text-input').oninput = (e) => { state.project.endCardText = e.target.value; saveProject(); };
+    document.getElementById('end-card-text-color').oninput = (e) => { state.project.endCardTextColor = e.target.value; saveProject(); };
+    document.getElementById('end-card-tint-color').oninput = (e) => { state.project.endCardTintColor = e.target.value; saveProject(); };
+    document.getElementById('end-song-select').onchange = (e) => { state.project.endSongId = e.target.value || null; saveProject(); };
     document.querySelectorAll('.inst-tab').forEach(btn => {
         btn.onclick = () => {
             state.ui.activeTrack = btn.dataset.track;
@@ -812,7 +903,7 @@ function stopRecording() {
 function togglePlayback(asTheater, startFromBeginning) {
     if (state.ui.isPreviewPlaying) stopSongPreview();
     if (state.ui.isPlaying) {
-        state.ui.isPlaying = false; state.ui.isTheaterMode = false; state.ui.isTitleCardActive = false;
+        state.ui.isPlaying = false; state.ui.isTheaterMode = false; state.ui.isTitleCardActive = false; state.ui.isEndCardActive = false;
         document.getElementById('play-btn').textContent = '▶️'; document.body.classList.remove('theater-mode');
         document.getElementById('play-group').classList.remove('is-playing');
         stopAllAudio(); state.project.currentSceneIndex = state.ui.movieStartSceneIndex;
@@ -1167,6 +1258,52 @@ function renderSoundtrackPanel() {
     const songLibraryList = document.getElementById('song-library-list');
     
     sceneMusicList.innerHTML = '';
+    
+    const createCardMusicListItem = (title, icon, songIdField) => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        
+        const thumb = document.createElement('div');
+        thumb.className = 'thumbnail transparent-pattern';
+        thumb.style.display = 'flex';
+        thumb.style.alignItems = 'center';
+        thumb.style.justifyContent = 'center';
+        thumb.textContent = icon;
+        div.appendChild(thumb);
+        
+        const name = document.createElement('span');
+        name.textContent = title;
+        div.appendChild(name);
+        
+        const select = document.createElement('select');
+        select.style.width = '140px';
+        select.style.marginLeft = 'auto';
+        select.style.padding = '4px';
+        const noneOpt = document.createElement('option');
+        noneOpt.value = '';
+        noneOpt.textContent = 'None';
+        select.appendChild(noneOpt);
+        
+        state.project.songs.forEach(song => {
+            const opt = document.createElement('option');
+            opt.value = song.id;
+            opt.textContent = song.name;
+            if (state.project[songIdField] === song.id) opt.selected = true;
+            select.appendChild(opt);
+        });
+        
+        select.onchange = (e) => {
+            state.project[songIdField] = e.target.value || null;
+            saveProject();
+        };
+        div.appendChild(select);
+        return div;
+    };
+
+    if (state.project.showTitleCard) {
+        sceneMusicList.appendChild(createCardMusicListItem('Title Card', '🎬', 'titleSongId'));
+    }
+
     state.project.scenes.forEach((s, i) => {
         const div = document.createElement('div');
         div.className = 'list-item';
@@ -1205,6 +1342,10 @@ function renderSoundtrackPanel() {
         div.appendChild(select);
         sceneMusicList.appendChild(div);
     });
+
+    if (state.project.endCardEnabled) {
+        sceneMusicList.appendChild(createCardMusicListItem('End Card', '🛑', 'endSongId'));
+    }
     
     songLibraryList.innerHTML = '';
     state.project.songs.forEach((song, i) => {
@@ -1740,28 +1881,7 @@ function resizeCurrentCostume(w, h) { if (editorCanvas.width === w && editorCanv
 function floodFill(sx, sy, color) { const ctx = editorCanvas.getContext('2d'), img = ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height), d = img.data, w = img.width, h = img.height, idx = (sy * w + sx) * 4, sR = d[idx], sG = d[idx+1], sB = d[idx+2], sA = d[idx+3], fill = color === 'transparent' ? { r:0, g:0, b:0, a:0 } : hexToRgb(color); if (color !== 'transparent') fill.a = 255; if (sR === fill.r && sG === fill.g && sB === fill.b && sA === fill.a) return; const q = [[sx, sy]]; while (q.length) { const [x, y] = q.pop(), i = (y * w + x) * 4; if (x < 0 || x >= w || y < 0 || y >= h || d[i] !== sR || d[i+1] !== sG || d[i+2] !== sB || d[i+3] !== sA) continue; d[i] = fill.r; d[i+1] = fill.g; d[i+2] = fill.b; d[i+3] = fill.a; q.push([x+1, y], [x-1, y], [x, y+1], [x, y-1]); } ctx.putImageData(img, 0, 0); }
 function hexToRgb(hex) { const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex); return r ? { r: parseInt(r[1], 16), g: parseInt(r[2], 16), b: parseInt(r[3], 16) } : { r: 0, g: 0, b: 0 }; }
 
-async function saveProject() { 
-    if (state.ui.isResetting) return; 
-    const scenes = await Promise.all(state.project.scenes.map(async s => ({ 
-        name: s.name, 
-        songId: s.songId,
-        backdrop: await serializeTarget(s.backdrop), 
-        actors: await Promise.all(s.actors.map(serializeTarget)) 
-    }))); 
-    localStorage.setItem('drag-n-film-project', JSON.stringify({ 
-        width: state.project.width, 
-        height: state.project.height, 
-        currentSceneIndex: state.project.currentSceneIndex, 
-        movieTitle: state.project.movieTitle, 
-        creatorName: state.project.creatorName, 
-        fontStyle: state.project.fontStyle, 
-        titleBgColor: state.project.titleBgColor, 
-        titleTextColor: state.project.titleTextColor, 
-        showTitleCard: state.project.showTitleCard, 
-        songs: state.project.songs,
-        scenes 
-    })); 
-}
+async function saveProject() { if (state.ui.isResetting) return; const scenes = await Promise.all(state.project.scenes.map(async s => ({ name: s.name, songId: s.songId, backdrop: await serializeTarget(s.backdrop), actors: await Promise.all(s.actors.map(serializeTarget)) }))); localStorage.setItem('drag-n-film-project', JSON.stringify({ width: state.project.width, height: state.project.height, currentSceneIndex: state.project.currentSceneIndex, movieTitle: state.project.movieTitle, creatorName: state.project.creatorName, fontStyle: state.project.fontStyle, titleBgColor: state.project.titleBgColor, titleTextColor: state.project.titleTextColor, showTitleCard: state.project.showTitleCard, titleSongId: state.project.titleSongId, endCardEnabled: state.project.endCardEnabled, endCardText: state.project.endCardText, endCardTextColor: state.project.endCardTextColor, endCardTintColor: state.project.endCardTintColor, endSongId: state.project.endSongId, songs: state.project.songs, scenes })); }
 async function serializeRecording(r) { 
     let audioData = null; 
     if (r.audio) { 
@@ -1775,21 +1895,26 @@ async function serializeRecording(r) {
 }
 async function serializeTarget(t) { return { id: t.id, name: t.name, currentCostume: t.currentCostume, x: t.x, y: t.y, costumes: t.costumes.map(c => ({ name: c.name, data: c.canvas.toDataURL() })), recordings: await Promise.all(t.recordings.map(serializeRecording)) }; }
 function blobToDataURL(blob) { return new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(blob); }); }
-async function loadProject() { 
-    const data = localStorage.getItem('drag-n-film-project'); 
-    if (!data) return; 
-    const p = JSON.parse(data); 
-    state.project.width = p.width; 
-    state.project.height = p.height; 
-    state.project.currentSceneIndex = p.currentSceneIndex || 0; 
-    state.project.movieTitle = p.movieTitle || "My Movie"; 
-    state.project.creatorName = p.creatorName || "Me"; 
-    state.project.fontStyle = p.fontStyle || "Arial"; 
-    state.project.titleBgColor = p.titleBgColor || "#ffffff"; 
-    state.project.titleTextColor = p.titleTextColor || "#000000"; 
-    state.project.showTitleCard = p.showTitleCard !== undefined ? p.showTitleCard : true; 
-    state.project.songs = (p.songs || []).map(song => {
-        if (song.tracks) {
+async function loadProject() {
+    const data = localStorage.getItem('drag-n-film-project');
+    if (!data) return;
+    const p = JSON.parse(data);
+    state.project.width = p.width;
+    state.project.height = p.height;
+    state.project.currentSceneIndex = p.currentSceneIndex || 0;
+    state.project.movieTitle = p.movieTitle || "My Movie";
+    state.project.creatorName = p.creatorName || "Me";
+    state.project.fontStyle = p.fontStyle || "Arial";
+    state.project.titleBgColor = p.titleBgColor || "#ffffff";
+    state.project.titleTextColor = p.titleTextColor || "#000000";
+    state.project.showTitleCard = p.showTitleCard !== undefined ? p.showTitleCard : true;
+    state.project.titleSongId = p.titleSongId || null;
+    state.project.endCardEnabled = p.endCardEnabled || false;
+    state.project.endCardText = p.endCardText || "Fin.";
+    state.project.endCardTextColor = p.endCardTextColor || "#ffffff";
+    state.project.endCardTintColor = p.endCardTintColor || "#000000";
+    state.project.endSongId = p.endSongId || null;
+    state.project.songs = (p.songs || []).map(song => {        if (song.tracks) {
             for (const trackName in song.tracks) {
                 const track = song.tracks[trackName];
                 if (track.notes) {
@@ -1847,6 +1972,12 @@ function importDragFile(e) {
             state.project.titleBgColor = p.titleBgColor || "#ffffff"; 
             state.project.titleTextColor = p.titleTextColor || "#000000"; 
             state.project.showTitleCard = p.showTitleCard !== undefined ? p.showTitleCard : true;
+            state.project.titleSongId = p.titleSongId || null;
+            state.project.endCardEnabled = p.endCardEnabled || false;
+            state.project.endCardText = p.endCardText || "Fin.";
+            state.project.endCardTextColor = p.endCardTextColor || "#ffffff";
+            state.project.endCardTintColor = p.endCardTintColor || "#000000";
+            state.project.endSongId = p.endSongId || null;
             state.project.songs = p.songs || [];
             state.project.scenes = await Promise.all(p.scenes.map(async s => ({ 
                 name: s.name, 
@@ -1876,6 +2007,12 @@ async function exportDragFile() {
         titleBgColor: state.project.titleBgColor, 
         titleTextColor: state.project.titleTextColor, 
         showTitleCard: state.project.showTitleCard,
+        titleSongId: state.project.titleSongId,
+        endCardEnabled: state.project.endCardEnabled,
+        endCardText: state.project.endCardText,
+        endCardTextColor: state.project.endCardTextColor,
+        endCardTintColor: state.project.endCardTintColor,
+        endSongId: state.project.endSongId,
         songs: state.project.songs
     })], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'project.drag'; a.click();
