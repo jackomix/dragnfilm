@@ -251,7 +251,7 @@ function renderLoop() {
                     if (currentSub !== state.ui.lastTriggeredSub) {
                         const loopSub = currentSub % (song.bars * 8);
                         if (state.ui.isExporting) console.log(`[MUSIC] Triggering notes for sub=${loopSub} (frame=${state.ui.currentFrame})`);
-                        ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub));
+                        ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub, null, state.ui.isExporting ? state.ui.exportDest : null));
                         state.ui.lastTriggeredSub = currentSub;
                     }
                 }
