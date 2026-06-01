@@ -1439,10 +1439,20 @@ function renderSongStudioGrid() {
     
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+
+    // Draw tonic highlights
+    const intervals = scales[song.scale];
+    ctx.fillStyle = '#f5f5f5'; // Very subtle highlight
+    for (let r = 0; r < rowCount; r++) {
+        const degree = 14 - r;
+        // In the interval array, 0 is the root/tonic
+        if (intervals[degree % intervals.length] === 0) {
+            ctx.fillRect(0, r * cellH, canvas.width, cellH);
+        }
+    }
+
     // Draw grid
-    for (let i = 0; i <= colCount; i++) {
-        ctx.beginPath();
+    for (let i = 0; i <= colCount; i++) {        ctx.beginPath();
         ctx.moveTo(i * cellW, 0);
         ctx.lineTo(i * cellW, canvas.height);
         if (i % 8 === 0) {
