@@ -809,6 +809,7 @@ function stopRecording() {
 }
 
 function togglePlayback(asTheater, startFromBeginning) {
+    if (state.ui.isPreviewPlaying) stopSongPreview();
     if (state.ui.isPlaying) {
         state.ui.isPlaying = false; state.ui.isTheaterMode = false; state.ui.isTitleCardActive = false;
         document.getElementById('play-btn').textContent = '▶️'; document.body.classList.remove('theater-mode');
@@ -1276,6 +1277,7 @@ function deleteSong(songId) {
 }
 
 function startSongPreview() {
+    if (state.ui.isPlaying) stopAllPlayback();
     if (state.ui.isPreviewPlaying) return;
     const songId = state.ui.activeSongId;
     if (!songId) return;
