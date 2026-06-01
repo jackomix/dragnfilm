@@ -866,7 +866,8 @@ function playSynth(freq, instrumentName, isChord, ctx = null, dest = null, durat
         osc.type = inst.type || 'sawtooth';
         
         osc.connect(gain);
-        gain.connect(target);
+        gain.connect(activeCtx.destination); // Always audible
+        if (dest && dest !== activeCtx.destination) gain.connect(dest);
         
         if (useEcho) {
             const delay = activeCtx.createDelay();
@@ -877,7 +878,8 @@ function playSynth(freq, instrumentName, isChord, ctx = null, dest = null, durat
             gain.connect(delay);
             delay.connect(feedback);
             feedback.connect(delay);
-            feedback.connect(target);
+            feedback.connect(activeCtx.destination);
+            if (dest && dest !== activeCtx.destination) feedback.connect(dest);
         }
 
         if (!dest && musicDest) gain.connect(musicDest);
@@ -926,7 +928,8 @@ function playDrum(degree, ctx = null, dest = null, useEcho = false) {
     const target = dest || activeCtx.destination;
     
     const connectToOutput = (node) => {
-        node.connect(target);
+        node.connect(activeCtx.destination); // Always audible
+        if (dest && dest !== activeCtx.destination) node.connect(dest);
         
         if (useEcho) {
             const delay = activeCtx.createDelay();
@@ -937,7 +940,8 @@ function playDrum(degree, ctx = null, dest = null, useEcho = false) {
             node.connect(delay);
             delay.connect(feedback);
             feedback.connect(delay);
-            feedback.connect(target);
+            feedback.connect(activeCtx.destination);
+            if (dest && dest !== activeCtx.destination) feedback.connect(dest);
         }
 
         if (!dest && musicDest) node.connect(musicDest);
