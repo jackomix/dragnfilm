@@ -413,7 +413,7 @@ function renderLoop() {
     if (!state.ui.isTheaterMode && !state.ui.isPlaying && state.ui.selectedActorId === 'backdrop') drawSelectionOutline(ctx, margin, margin, state.project.width, state.project.height);
 
     if (state.ui.isEndCardActive) {
-        ctx.globalCompositeOperation = "color";
+        ctx.globalCompositeOperation = "multiply";
         ctx.fillStyle = state.project.endCardTintColor;
         ctx.fillRect(margin, margin, state.project.width, state.project.height);
         ctx.globalCompositeOperation = "source-over";
@@ -433,7 +433,7 @@ function renderLoop() {
             renderProjectFrame(state.ui.exportCtx, renderFrame, state.ui.exportCanvas.width, state.ui.exportCanvas.height, 4, renderScene);
             if (state.ui.isEndCardActive) {
                 const expCtx = state.ui.exportCtx;
-                expCtx.globalCompositeOperation = "color";
+                expCtx.globalCompositeOperation = "multiply";
                 expCtx.fillStyle = state.project.endCardTintColor;
                 expCtx.fillRect(0, 0, state.ui.exportCanvas.width, state.ui.exportCanvas.height);
                 expCtx.globalCompositeOperation = "source-over";
