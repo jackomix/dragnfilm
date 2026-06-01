@@ -252,10 +252,10 @@ function renderLoop() {
                 }
             }
 
-            if (state.ui.isTheaterMode && state.ui.isEndCardActive && state.project.endCardEnabled) {
+            if ((state.ui.isTheaterMode || state.ui.isExporting) && state.ui.isEndCardActive && state.project.endCardEnabled) {
                 if (state.ui.currentFrame >= 120) {
                     togglePlayback();
-                    return;
+                    break;
                 }
             }
 
@@ -499,6 +499,7 @@ function updateProgressBarUI(currentFrame, maxFrames) {
         if (i === durations.length - 1) seg.style.borderRight = `1px solid ${color}`;
         const fill = document.createElement('div'); fill.className = 'movie-progress-fill'; fill.style.backgroundColor = color;
         if (state.ui.isTitleCardActive) fill.style.width = '0%';
+        else if (state.ui.isEndCardActive) fill.style.width = '100%';
         else if (i < state.project.currentSceneIndex) fill.style.width = '100%';
         else if (i === state.project.currentSceneIndex) {
             const isActive = state.ui.isPlaying || state.ui.isRecording;
