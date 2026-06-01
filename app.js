@@ -1441,13 +1441,23 @@ function renderSongStudioGrid() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw tonic highlights
-    const intervals = scales[song.scale];
-    ctx.fillStyle = '#f5f5f5'; // Very subtle highlight
-    for (let r = 0; r < rowCount; r++) {
-        const degree = 14 - r;
-        // In the interval array, 0 is the root/tonic
-        if (intervals[degree % intervals.length] === 0) {
-            ctx.fillRect(0, r * cellH, canvas.width, cellH);
+    const intervals = scales[song.scale] || scales['happy'];
+    const trackColors = { lead: '#00ffff', chords: '#ff00ff', bass: '#00ff00', drums: '#ffff00' };
+    const baseColor = trackColors[state.ui.activeTrack] || '#f5f5f5';
+    
+    // Convert hex to rgba for subtle tint
+    const hexToRgba = (hex, alpha) => {
+        const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+    
+    ctx.fillStyle = hexToRgba(baseColor, 0.15); // Subtle tint
+    if (intervals && intervals.length > 0) {
+        for (let r = 0; r < rowCount; r++) {
+            const degree = 14 - r;
+            if (intervals[Math.abs(degree) % intervals.length] === 0) {
+                ctx.fillRect(0, r * cellH, canvas.width, cellH);
+            }
         }
     }
 
@@ -1475,7 +1485,6 @@ function renderSongStudioGrid() {
     }
     
     // Draw notes for active track
-    const trackColors = { lead: '#4a90e2', chords: '#ff00ff', bass: '#7ed321', drums: '#ffff00' };
     const track = song.tracks[state.ui.activeTrack];
     
     Object.entries(track.notes).forEach(([col, degrees]) => {
@@ -1508,25 +1517,17 @@ function updateMovieExportButtons() { const el = document.getElementById('movie-
 
 function addActor() { const a = { id: 'actor_' + Date.now(), name: 'Actor ' + (getCurrentScene().actors.length + 1), costumes: [createEmptyCostume(64, 64)], currentCostume: 0, x: state.project.width / 2, y: state.project.height / 2, recordings: [] }; getCurrentScene().actors.push(a); state.ui.selectedActorId = a.id; renderActorList(); saveProject(); }
 function renderActorList() {
-    actorList.innerHTML = ''; 
-    const scene = getCurrentScene(); 
-    if (!scene) return;
-    
-    if (scene.backdrop) {
-        actorList.appendChild(createListItem(scene.backdrop, false, -1));
-    }
+    actorList.innerHTML = ''; const scene = getCurrentScene(); if (!scene) return;
+    actorList.appendChild(createListItem(scene.backdrop, false, -1));
     const sep = document.createElement('div'); sep.className = 'backdrop-separator'; actorList.appendChild(sep);
-    if (scene.actors) {
-        scene.actors.forEach((a, i) => {
-            const item = createListItem(a, true, i); item.draggable = true;
-            // ... (rest of the listeners)
-            item.ondragstart = (e) => { if (e.target.classList.contains('clickable-name') || e.target.classList.contains('clickable-icon')) { e.preventDefault(); return; } dragSrcIndex = i; item.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; };
-            item.ondragend = () => { item.classList.remove('dragging'); document.querySelectorAll('.list-item').forEach(el => el.classList.remove('drag-over')); };
-            item.ondragover = (e) => { e.preventDefault(); item.classList.add('drag-over'); };
-            item.ondrop = (e) => { e.preventDefault(); if (dragSrcIndex !== -1 && dragSrcIndex !== i) { const moved = scene.actors.splice(dragSrcIndex, 1)[0]; scene.actors.splice(i, 0, moved); renderActorList(); saveProject(); } };
-            actorList.appendChild(item);
-        });
-    }
+    scene.actors.forEach((a, i) => {
+        const item = createListItem(a, true, i); item.draggable = true;
+        item.ondragstart = (e) => { if (e.target.classList.contains('clickable-name') || e.target.classList.contains('clickable-icon')) { e.preventDefault(); return; } dragSrcIndex = i; item.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; };
+        item.ondragend = () => { item.classList.remove('dragging'); document.querySelectorAll('.list-item').forEach(el => el.classList.remove('drag-over')); };
+        item.ondragover = (e) => { e.preventDefault(); item.classList.add('drag-over'); };
+        item.ondrop = (e) => { e.preventDefault(); if (dragSrcIndex !== -1 && dragSrcIndex !== i) { const moved = scene.actors.splice(dragSrcIndex, 1)[0]; scene.actors.splice(i, 0, moved); renderActorList(); saveProject(); } };
+        actorList.appendChild(item);
+    });
 }
 function createListItem(t, canDel, index) {
     const div = document.createElement('div'); div.className = 'list-item' + (state.ui.selectedActorId === t.id ? ' active' : '');
