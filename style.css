@@ -554,7 +554,7 @@ button:disabled {
 
 #studio-bpm { width: 50px; }
 #studio-bars { width: 45px; }
-#studio-key { width: 55px; }
+#studio-key { width: 45px; }
 #studio-scale { width: 90px; }
 
 .song-editor-layout {
