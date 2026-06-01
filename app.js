@@ -1800,25 +1800,25 @@ async function exportMovie(fullMovie, format) {
     const titleCardDurationFrames = (fullMovie && state.project.showTitleCard) ? 120 : 0;
     const totalFrames = durations.reduce((a, b) => a + b, 0) + titleCardDurationFrames;
     
-    state.ui.isExporting = true;
-    state.ui.exportFullMovie = fullMovie;
-    state.ui.exportCanvas = expCanvas;
-    state.ui.exportCtx = expCtx;
-
     if (format === 'video') {
+        state.ui.isExporting = true;
+        state.ui.exportFullMovie = fullMovie;
+        state.ui.exportCanvas = expCanvas;
+        state.ui.exportCtx = expCtx;
+
+        const stream = state.ui.exportCanvas.captureStream(FPS);
         if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
         if (audioContext.state === 'suspended') audioContext.resume();
         state.ui.exportDest = audioContext.createMediaStreamDestination();
         
-        // AUDIO STARVATION FIX: Inject continuous silence
+        // AUDIO STARVATION FIX: Inject continuous silence so MediaRecorder doesn't stall waiting for playAllAudio()
         const silentOsc = audioContext.createOscillator();
         const silentGain = audioContext.createGain();
-        silentGain.gain.value = 0;
+        silentGain.gain.value = 0; // Pure silence
         silentOsc.connect(silentGain);
         silentGain.connect(state.ui.exportDest);
         silentOsc.start();
         
-        const stream = state.ui.exportCanvas.captureStream(0); // Manual frame capture
         const recorder = new MediaRecorder(new MediaStream([...stream.getVideoTracks(), ...state.ui.exportDest.stream.getAudioTracks()]), { mimeType: 'video/webm' });
         const chunks = [];
         recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
@@ -1827,47 +1827,13 @@ async function exportMovie(fullMovie, format) {
             a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })); 
             a.download = fullMovie ? 'movie.webm' : 'scene.webm'; 
             a.click(); 
-            state.ui.isExporting = false;
-            state.ui.exportDest = null;
         };
-        recorder.start();
-
-        // Manual Frame-by-Frame Export Loop (Not visibility-throttled)
-        for (let f = 0; f < totalFrames; f++) {
-            if (f < titleCardDurationFrames) {
-                tcCtx.clearRect(0,0,tcCanvas.width, tcCanvas.height);
-                drawTitleCard(tcCtx, 0);
-                expCtx.drawImage(tcCanvas, 0, 0, expCanvas.width, expCanvas.height);
-            } else {
-                let remaining = f - titleCardDurationFrames, currentSI = 0;
-                while (remaining >= durations[currentSI] && currentSI < scenesToExport.length - 1) {
-                    remaining -= durations[currentSI];
-                    currentSI++;
-                }
-                const scene = scenesToExport[currentSI];
-                renderProjectFrame(expCtx, remaining, expCanvas.width, expCanvas.height, upScale, scene);
-
-                // Music triggering during export
-                const song = scene.songId ? state.project.songs.find(s => s.id === scene.songId) : null;
-                if (song) {
-                    const msPerSub = 30000 / song.bpm;
-                    const frameMs = f * FRAME_DURATION;
-                    const currentSub = Math.floor(frameMs / msPerSub);
-                    const lastSub = f === 0 ? -1 : Math.floor(((f - 1) * FRAME_DURATION) / msPerSub);
-                    if (currentSub !== lastSub) {
-                        const loopSub = currentSub % (song.bars * 8);
-                        ['lead', 'chords', 'bass', 'drums'].forEach(t => triggerSongNote(song, t, loopSub, audioContext, state.ui.exportDest));
-                    }
-                }
-            }
-            
-            stream.getVideoTracks()[0].requestFrame(); // Capture this specific frame
-            updateProgressBarUI(f, totalFrames);
-            await new Promise(r => setTimeout(r, 1000/FPS)); // Control export speed without throttling
-        }
-        recorder.stop();
+        state.ui.exportRecorder = recorder;
+        recorder.start(); 
+        
+        togglePlayback(true, fullMovie);
     } else {
-        // GIF logic already used its own loop
+        togglePlayback(true, fullMovie);
         const { GIFEncoder, quantize, applyPalette } = await import('https://unpkg.com/gifenc?module');
         const fps = 15, framesPerGifFrame = 60 / fps, delay = 1000 / fps, gif = GIFEncoder();
         for (let f = 0; f < totalFrames; f += framesPerGifFrame) {
@@ -1879,14 +1845,9 @@ async function exportMovie(fullMovie, format) {
             }
             const { data, width, height } = expCtx.getImageData(0, 0, expCanvas.width, expCanvas.height), palette = quantize(data, 256), index = applyPalette(data, palette);
             gif.writeFrame(index, width, height, { palette, delay });
-            updateProgressBarUI(currentFrame, totalFrames);
         }
-        gif.finish(); 
-        const a = document.createElement('a'); 
-        a.href = URL.createObjectURL(new Blob([gif.bytes()], { type: 'image/gif' })); 
-        a.download = fullMovie ? 'movie.gif' : 'scene.gif'; 
-        a.click();
-        state.ui.isExporting = false;
+        if (state.ui.isPlaying) togglePlayback();
+        gif.finish(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([gif.bytes()], { type: 'image/gif' })); a.download = fullMovie ? 'movie.gif' : 'scene.gif'; a.click();
     }
 }
 function newProject() { if (confirm("Start a new project? All unsaved changes will be lost.")) { state.ui.isResetting = true; sessionStorage.setItem('drag-n-film-reset', 'true'); location.reload(); } }
