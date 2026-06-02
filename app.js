@@ -242,9 +242,9 @@ function renderLoop() {
                  console.log(`[RL-STEP] tick! currFrame=${state.ui.currentFrame} isTC=${state.ui.isTitleCardActive}`);
             }
 
-            const titleCardDurationFrames = state.project.showTitleCard ? 120 : 0;
+            const tcDur = state.project.showTitleCard ? getSongDurationInFrames(state.project.titleSongId) : 0;
             if (state.ui.isTheaterMode && state.ui.isTitleCardActive && state.project.showTitleCard) {
-                if (state.ui.currentFrame >= titleCardDurationFrames) {
+                if (state.ui.currentFrame >= tcDur) {
                     console.log(`[RL-TC] Title card duration met. frame=${state.ui.currentFrame}. transition to simulation.`);
                     state.ui.isTitleCardActive = false;
                     state.ui.currentFrame = 0;
@@ -252,8 +252,9 @@ function renderLoop() {
                 }
             }
 
+            const ecDur = state.project.endSongId ? getSongDurationInFrames(state.project.endSongId) : 120;
             if ((state.ui.isTheaterMode || state.ui.isExporting) && state.ui.isEndCardActive && state.project.endCardEnabled) {
-                if (state.ui.currentFrame >= 120) {
+                if (state.ui.currentFrame >= ecDur) {
                     togglePlayback();
                     break;
                 }
@@ -311,7 +312,7 @@ function renderLoop() {
         state.ui.timeAccumulator = 0;
     }
 
-    const titleCardDurationFrames = state.project.showTitleCard ? 120 : 0;
+    const tcDur = state.project.showTitleCard ? getSongDurationInFrames(state.project.titleSongId) : 0;
     const maxFrames = getMaxFrames(scene) || 30;
 
     updateProgressBarUI(state.ui.currentFrame, maxFrames);
@@ -545,6 +546,14 @@ function getMaxFrames(scene) {
         }
     });
     return max;
+}
+
+function getSongDurationInFrames(songId) {
+    const song = state.project.songs.find(s => s.id === songId);
+    if (!song) return 120; // Default 2 seconds
+    const msPerSub = 30000 / song.bpm;
+    const totalMs = song.bars * 8 * msPerSub;
+    return Math.ceil(totalMs / FRAME_DURATION);
 }
 
 function onStageMouseDown(e) {
@@ -2018,8 +2027,9 @@ async function exportMovie(fullMovie, format) {
     const tcCtx = tcCanvas.getContext('2d'); tcCtx.imageSmoothingEnabled = false;
     const scenesToExport = fullMovie ? [...state.project.scenes] : [getCurrentScene()];
     const durations = scenesToExport.map(s => getMaxFrames(s) || 30);
-    const titleCardDurationFrames = (fullMovie && state.project.showTitleCard) ? 120 : 0;
-    const totalFrames = durations.reduce((a, b) => a + b, 0) + titleCardDurationFrames;
+    const titleCardDurationFrames = (fullMovie && state.project.showTitleCard) ? getSongDurationInFrames(state.project.titleSongId) : 0;
+    const endCardDurationFrames = (fullMovie && state.project.endCardEnabled) ? getSongDurationInFrames(state.project.endSongId) : 0;
+    const totalFrames = durations.reduce((a, b) => a + b, 0) + titleCardDurationFrames + endCardDurationFrames;
     
     if (format === 'video') {
         state.ui.isExporting = true;
@@ -2059,9 +2069,36 @@ async function exportMovie(fullMovie, format) {
         const fps = 15, framesPerGifFrame = 60 / fps, delay = 1000 / fps, gif = GIFEncoder();
         for (let f = 0; f < totalFrames; f += framesPerGifFrame) {
             const currentFrame = Math.floor(f);
-            if (currentFrame < titleCardDurationFrames) { tcCtx.clearRect(0,0,tcCanvas.width, tcCanvas.height); drawTitleCard(tcCtx, 0); expCtx.drawImage(tcCanvas, 0, 0, expCanvas.width, expCanvas.height); }
-            else {
-                let remaining = currentFrame - titleCardDurationFrames, currentSI = 0; while (remaining >= durations[currentSI] && currentSI < scenesToExport.length - 1) { remaining -= durations[currentSI]; currentSI++; }
+            if (currentFrame < titleCardDurationFrames) { 
+                tcCtx.clearRect(0,0,tcCanvas.width, tcCanvas.height); 
+                drawTitleCard(tcCtx, 0); 
+                expCtx.drawImage(tcCanvas, 0, 0, expCanvas.width, expCanvas.height); 
+            } else if (state.project.endCardEnabled && currentFrame >= totalFrames - endCardDurationFrames) {
+                // Draw last frame of last scene
+                const lastScene = scenesToExport[scenesToExport.length - 1];
+                const lastFrameIdx = durations[durations.length - 1] - 1;
+                renderProjectFrame(expCtx, lastFrameIdx, expCanvas.width, expCanvas.height, upScale, lastScene);
+                
+                // Apply End Card Overlay
+                expCtx.globalCompositeOperation = "saturation";
+                expCtx.fillStyle = "#000000";
+                expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
+                expCtx.globalCompositeOperation = "multiply";
+                expCtx.fillStyle = state.project.endCardTintColor;
+                expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
+                expCtx.globalCompositeOperation = "source-over";
+                const ecBuf = document.createElement('canvas'); ecBuf.width = state.project.width; ecBuf.height = state.project.height;
+                const ecBufCtx = ecBuf.getContext('2d'); ecBufCtx.imageSmoothingEnabled = false;
+                ecBufCtx.font = `bold 24px "${state.project.fontStyle}"`;
+                ecBufCtx.textBaseline = 'bottom';
+                drawBoilingText(ecBufCtx, state.project.endCardText, 10, state.project.height - 10, state.project.endCardTextColor, "left");
+                expCtx.drawImage(ecBuf, 0, 0, expCanvas.width, expCanvas.height);
+            } else {
+                let remaining = currentFrame - titleCardDurationFrames, currentSI = 0; 
+                while (remaining >= durations[currentSI] && currentSI < scenesToExport.length - 1) { 
+                    remaining -= durations[currentSI]; 
+                    currentSI++; 
+                }
                 renderProjectFrame(expCtx, remaining, expCanvas.width, expCanvas.height, upScale, scenesToExport[currentSI]);
             }
             const { data, width, height } = expCtx.getImageData(0, 0, expCanvas.width, expCanvas.height), palette = quantize(data, 256), index = applyPalette(data, palette);
