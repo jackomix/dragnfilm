@@ -1,28 +1,15 @@
-# System Files
+# OS Files
 .DS_Store
 Thumbs.db
 
 # Dependencies
 node_modules/
 
+# Local Project Data
+docs/
+GEMINI.md
+
 # Build and Export Artifacts
 *.webm
 *.gif
 *.drag
-
-# Recovery scripts and temp files
-*.py
-*.js.bak
-reconstruction_data.json
-turn27_candidate.json
-recovered_*.js
-restored_*.js
-stable_app.js
-final_reversion.js
-temp_music.js
-original_app.js
-app_restored.js
-
-# Project specific ignores
-GEMINI.md
-docs/
