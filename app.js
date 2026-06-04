@@ -23,7 +23,7 @@ const state = {
         currentTool: 'pencil', currentColor: '#000000',
         dragMode: 'drag', 
         clipboard: null,
-        isRecording: false, isPlaying: false, isTheaterMode: false,
+        isRecording: false, recordingDim: false, isPlaying: false, isTheaterMode: false,
         isTitleCardActive: false,
         isEndCardActive: false,
         isExporting: false,
@@ -166,6 +166,8 @@ function getActorDisplayState(actor, frameIndex) {
     let x = actor.x, y = actor.y, ci = actor.currentCostume;
     const rec = actor.recordings[actor.recordings.length - 1];
     
+    if (state.countdownTimer) return { x, y, ci };
+
     if (state.ui.isPlaying || state.ui.isRecording) {
         if (rec && rec.frames) {
             if (rec.frames[frameIndex]) {
@@ -838,9 +840,24 @@ function draw(e) {
 }
 function stopDraw() { if (isDrawing) { commitUndo(preStrokeState); isDrawing = false; saveCurrentCostume(); renderActorList(); } }
 function plotPixel(x, y) {
-    const ctx = editorCanvas.getContext('2d'), color = state.ui.currentColor;
-    if (color === 'transparent') ctx.globalCompositeOperation = 'destination-out'; else { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = color; }
-    brushPixels.forEach(p => ctx.fillRect(x + p.dx, y + p.dy, 1, 1)); ctx.globalCompositeOperation = 'source-over';
+    const ctx = editorCanvas.getContext('2d');
+    let color = state.ui.currentColor;
+    const isBD = state.ui.editingTarget && state.ui.editingTarget.id === 'backdrop';
+    
+    if (color === 'transparent') {
+        if (isBD) {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = 'white';
+        } else {
+            ctx.globalCompositeOperation = 'destination-out';
+        }
+    } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = color;
+    }
+    
+    brushPixels.forEach(p => ctx.fillRect(x + p.dx, y + p.dy, 1, 1));
+    ctx.globalCompositeOperation = 'source-over';
 }
 function plotLine(x0, y0, x1, y1) {
     const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0), sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1;
@@ -848,10 +865,58 @@ function plotLine(x0, y0, x1, y1) {
 }
 function plotRect(x0, y0, x1, y1) { const l = Math.min(x0, x1), t = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0); for (let x = l; x <= l + w; x++) { plotPixel(x, t); plotPixel(x, t + h); } for (let y = t; y <= t + h; y++) { plotPixel(l, y); plotPixel(l + w, y); } }
 function plotCircle(x0, y0, x1, y1) {
-    const r = Math.floor(Math.sqrt(Math.pow(x1 - x0, 2) + Math.pow(y1 - y0, 2)));
-    let x = r, y = 0, err = 0; while (x >= y) {
-        plotPixel(x0 + x, y0 + y); plotPixel(x0 + y, y0 + x); plotPixel(x0 - y, y0 + x); plotPixel(x0 - x, y0 + y); plotPixel(x0 - x, y0 - y); plotPixel(x0 - y, y0 - x); plotPixel(x0 + y, y0 - x); plotPixel(x0 + x, y0 - y);
-        if (err <= 0) { y += 1; err += 2 * y + 1; } if (err > 0) { x -= 1; err -= 2 * x + 1; }
+    const rx = Math.abs(x1 - x0) / 2;
+    const ry = Math.abs(y1 - y0) / 2;
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+
+    if (rx === 0 || ry === 0) return;
+
+    let x = 0;
+    let y = ry;
+    let rx2 = rx * rx;
+    let ry2 = ry * ry;
+    let twoRx2 = 2 * rx2;
+    let twoRy2 = 2 * ry2;
+    let p;
+    let px = 0;
+    let py = twoRx2 * y;
+
+    const plot = (x, y) => {
+        plotPixel(Math.round(cx + x), Math.round(cy + y));
+        plotPixel(Math.round(cx - x), Math.round(cy + y));
+        plotPixel(Math.round(cx + x), Math.round(cy - y));
+        plotPixel(Math.round(cx - x), Math.round(cy - y));
+    };
+
+    // Region 1
+    p = Math.round(ry2 - (rx2 * ry) + (0.25 * rx2));
+    while (px < py) {
+        plot(x, y);
+        x++;
+        px += twoRy2;
+        if (p < 0) {
+            p += ry2 + px;
+        } else {
+            y--;
+            py -= twoRx2;
+            p += ry2 + px - py;
+        }
+    }
+
+    // Region 2
+    p = Math.round(ry2 * (x + 0.5) * (x + 0.5) + rx2 * (y - 1) * (y - 1) - rx2 * ry2);
+    while (y >= 0) {
+        plot(x, y);
+        y--;
+        py -= twoRx2;
+        if (p > 0) {
+            p += rx2 - py;
+        } else {
+            x++;
+            px += twoRy2;
+            p += rx2 - py + px;
+        }
     }
 }
 function updateLiveThumbnail() { const target = state.ui.editingTarget, ci = state.ui.editingCostumeIndex, item = costumeList.children[ci]; if (item) { const thumb = item.querySelector('.thumbnail'); if (thumb) thumb.src = editorCanvas.toDataURL(); } }
@@ -875,16 +940,46 @@ function pasteCostume() {
 async function toggleMic() { state.ui.micEnabled = !state.ui.micEnabled; if (state.ui.micEnabled && !micStream) { try { micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true } }); } catch (e) { console.warn("Mic denied"); state.ui.micEnabled = false; } } updateMicButton(); }
 function updateMicButton() { const btn = document.getElementById('mic-toggle-btn'); btn.style.filter = state.ui.micEnabled ? 'none' : 'grayscale(1) opacity(0.5)'; }
 function toggleDragMode() { state.ui.dragMode = (state.ui.dragMode === 'drag') ? 'hover' : 'drag'; document.getElementById('drag-mode-btn').textContent = (state.ui.dragMode === 'drag') ? '🖱️' : '🚁'; }
+function playTick() {
+    const activeCtx = audioContext || (audioContext = new (window.AudioContext || window.webkitAudioContext)());
+    if (activeCtx.state === 'suspended') activeCtx.resume();
+    const osc = activeCtx.createOscillator();
+    const gain = activeCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, activeCtx.currentTime); 
+    osc.frequency.exponentialRampToValueAtTime(0.01, activeCtx.currentTime + 0.05);
+    gain.gain.setValueAtTime(0.3, activeCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, activeCtx.currentTime + 0.05);
+    osc.connect(gain);
+    gain.connect(activeCtx.destination);
+    osc.start(activeCtx.currentTime);
+    osc.stop(activeCtx.currentTime + 0.05);
+}
+
 function startRecordingProcess() {
     const btn = document.getElementById('record-btn'); if (state.ui.isRecording) { stopRecording(); return; }
     if (state.countdownTimer) { clearInterval(state.countdownTimer); state.countdownTimer = null; document.getElementById('countdown-overlay').classList.add('hidden'); btn.textContent = '🔴'; return; }
     const t = (state.ui.selectedActorId === 'backdrop' ? getCurrentScene().backdrop : getCurrentScene().actors.find(a => a.id === state.ui.selectedActorId));
     if (!t) { alert("Select actor or backdrop!"); return; }
     const overlay = document.getElementById('countdown-overlay'); overlay.innerHTML = ''; overlay.classList.remove('hidden'); btn.textContent = '❌';
-    let count = 3; overlay.textContent = count; state.countdownTimer = setInterval(() => { count--; if (count > 0) overlay.textContent = count; else { clearInterval(state.countdownTimer); state.countdownTimer = null; overlay.classList.add('hidden'); startRecording(t); } }, 1000);
+    let count = 3; overlay.textContent = count; 
+    playTick();
+    state.countdownTimer = setInterval(() => { 
+        count--; 
+        if (count > 0) { 
+            overlay.textContent = count; 
+            playTick();
+        } else { 
+            clearInterval(state.countdownTimer); 
+            state.countdownTimer = null; 
+            overlay.classList.add('hidden'); 
+            startRecording(t); 
+        } 
+    }, 1000);
 }
 async function startRecording(t) { 
     state.ui.isRecording = true; document.getElementById('record-btn').textContent = '⏹️'; 
+    state.ui.recordingDim = true;
     const newRec = { frames: [], audio: null }; 
     t.recordings.push(newRec); 
     state.ui.currentFrame = 0;
@@ -896,6 +991,7 @@ async function startRecording(t) {
 }
 function stopRecording() { 
     state.ui.isRecording = false; 
+    state.ui.recordingDim = false;
     document.getElementById('record-btn').textContent = '🔴'; 
     if (mediaRecorder) mediaRecorder.stop(); 
     stopAllAudio(); saveProject(); renderActorList(); 
@@ -981,7 +1077,9 @@ function playSynth(freqs, instrumentName, ctx = null, dest = null, duration = 0.
     
     const inst = instruments[instrumentName] || instruments.synth;
     
-    const maxGain = 0.2 / freqs.length; // Prevent clipping by normalizing volume
+    const baseVolume = 0.12; 
+    let maxGain = baseVolume / freqs.length;
+    if (state.ui.recordingDim) maxGain *= 0.2; 
     const now = activeCtx.currentTime;
     
     freqs.forEach(f => {
@@ -1111,7 +1209,11 @@ function playDrum(degree, ctx = null, dest = null, useEcho = false) {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, now);
         osc.frequency.exponentialRampToValueAtTime(sweep, now + decay);
-        gain.gain.setValueAtTime(vol, now);
+        
+        let actualVol = vol * 0.6;
+        if (state.ui.recordingDim) actualVol *= 0.2;
+        
+        gain.gain.setValueAtTime(actualVol, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
         osc.connect(gain);
         connectToOutput(gain);
@@ -1126,7 +1228,11 @@ function playDrum(degree, ctx = null, dest = null, useEcho = false) {
         filter.type = filterType;
         filter.frequency.value = filterFreq;
         const gain = activeCtx.createGain();
-        gain.gain.setValueAtTime(vol, now);
+        
+        let actualVol = vol * 0.6;
+        if (state.ui.recordingDim) actualVol *= 0.2;
+
+        gain.gain.setValueAtTime(actualVol, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
         noise.connect(filter);
         filter.connect(gain);
@@ -1194,8 +1300,20 @@ function playAllAudio() {
     [scene.backdrop, ...scene.actors].forEach(t => { 
         const rec = t.recordings[t.recordings.length - 1]; 
         if (rec && rec.audio) {
-            const audio = new Audio(rec.audio), source = audioContext.createMediaElementSource(audio), panner = audioContext.createStereoPanner(); 
-            source.connect(panner); panner.connect(audioContext.destination); 
+            const audio = new Audio(rec.audio), source = audioContext.createMediaElementSource(audio);
+            const compressor = audioContext.createDynamicsCompressor();
+            compressor.threshold.setValueAtTime(-24, audioContext.currentTime);
+            compressor.knee.setValueAtTime(10, audioContext.currentTime);
+            compressor.ratio.setValueAtTime(4, audioContext.currentTime);
+            compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
+            compressor.release.setValueAtTime(0.25, audioContext.currentTime);
+            const makeupGain = audioContext.createGain();
+            makeupGain.gain.setValueAtTime(2.0, audioContext.currentTime);
+            const panner = audioContext.createStereoPanner(); 
+            source.connect(compressor);
+            compressor.connect(makeupGain);
+            makeupGain.connect(panner);
+            panner.connect(audioContext.destination); 
             if (state.ui.isExporting && state.ui.exportDest) panner.connect(state.ui.exportDest);
             audio.play(); activeAudioPlayers.push({ audio, panner, target: t, source }); 
             if (t.id !== 'backdrop') { 
@@ -1757,7 +1875,11 @@ function openEditor(t) { state.ui.editingTarget = t; state.ui.editingCostumeInde
 
 async function enterCameraMode() {
     const ctx = editorCanvas.getContext('2d');
-    state.ui.cameraBackup = ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height);
+    state.ui.cameraBackup = {
+        width: editorCanvas.width,
+        height: editorCanvas.height,
+        data: ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height)
+    };
     
     try {
         state.ui.cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -1854,8 +1976,7 @@ function exitCameraMode(restoreBackup) {
     state.ui.cameraMode = false;
     
     if (restoreBackup && state.ui.cameraBackup) {
-        const ctx = editorCanvas.getContext('2d');
-        ctx.putImageData(state.ui.cameraBackup, 0, 0);
+        applyEditorState(state.ui.cameraBackup);
     }
     
     state.ui.cameraBackup = null;
@@ -1879,7 +2000,25 @@ function renderCostumeList() {
 function addCostume() { const t = state.ui.editingTarget, last = t.costumes[t.costumes.length - 1], nc = createEmptyCostume(last.canvas.width, last.canvas.height, t.id === 'backdrop'); t.costumes.push(nc); state.ui.editingCostumeIndex = t.costumes.length - 1; state.ui.undoStack = []; state.ui.redoStack = []; updateUndoRedoButtons(); renderCostumeList(); loadCostumeToEditor(nc); }
 function loadCostumeToEditor(c) { editorCanvas.width = c.canvas.width; editorCanvas.height = c.canvas.height; const dw = 400, dh = dw * (c.canvas.height / c.canvas.width); editorCanvas.style.width = dw + 'px'; editorCanvas.style.height = dh + 'px'; const ctx = editorCanvas.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.drawImage(c.canvas, 0, 0); }
 function resizeCurrentCostume(w, h) { if (editorCanvas.width === w && editorCanvas.height === h) return; const ctx = editorCanvas.getContext('2d'); commitUndo({ width: editorCanvas.width, height: editorCanvas.height, data: ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height) }); const t = state.ui.editingTarget, c = t.costumes[state.ui.editingCostumeIndex], temp = document.createElement('canvas'); temp.width = c.canvas.width; temp.height = c.canvas.height; temp.getContext('2d').drawImage(c.canvas, 0, 0); c.canvas.width = w; c.canvas.height = h; const ctx2 = c.canvas.getContext('2d'); ctx2.clearRect(0, 0, w, h); ctx2.imageSmoothingEnabled = false; ctx2.drawImage(temp, (w - temp.width)/2, (h - temp.height)/2); loadCostumeToEditor(c); }
-function floodFill(sx, sy, color) { const ctx = editorCanvas.getContext('2d'), img = ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height), d = img.data, w = img.width, h = img.height, idx = (sy * w + sx) * 4, sR = d[idx], sG = d[idx+1], sB = d[idx+2], sA = d[idx+3], fill = color === 'transparent' ? { r:0, g:0, b:0, a:0 } : hexToRgb(color); if (color !== 'transparent') fill.a = 255; if (sR === fill.r && sG === fill.g && sB === fill.b && sA === fill.a) return; const q = [[sx, sy]]; while (q.length) { const [x, y] = q.pop(), i = (y * w + x) * 4; if (x < 0 || x >= w || y < 0 || y >= h || d[i] !== sR || d[i+1] !== sG || d[i+2] !== sB || d[i+3] !== sA) continue; d[i] = fill.r; d[i+1] = fill.g; d[i+2] = fill.b; d[i+3] = fill.a; q.push([x+1, y], [x-1, y], [x, y+1], [x, y-1]); } ctx.putImageData(img, 0, 0); }
+function floodFill(sx, sy, color) {
+    const ctx = editorCanvas.getContext('2d'), img = ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height), d = img.data, w = img.width, h = img.height, idx = (sy * w + sx) * 4, sR = d[idx], sG = d[idx+1], sB = d[idx+2], sA = d[idx+3];
+    
+    const isBD = state.ui.editingTarget && state.ui.editingTarget.id === 'backdrop';
+    let fill = (color === 'transparent') 
+        ? (isBD ? { r:255, g:255, b:255, a:255 } : { r:0, g:0, b:0, a:0 }) 
+        : hexToRgb(color);
+        
+    if (color !== 'transparent') fill.a = 255;
+    if (sR === fill.r && sG === fill.g && sB === fill.b && sA === fill.a) return;
+    const q = [[sx, sy]];
+    while (q.length) {
+        const [x, y] = q.pop(), i = (y * w + x) * 4;
+        if (x < 0 || x >= w || y < 0 || y >= h || d[i] !== sR || d[i+1] !== sG || d[i+2] !== sB || d[i+3] !== sA) continue;
+        d[i] = fill.r; d[i+1] = fill.g; d[i+2] = fill.b; d[i+3] = fill.a;
+        q.push([x+1, y], [x-1, y], [x, y+1], [x, y-1]);
+    }
+    ctx.putImageData(img, 0, 0);
+}
 function hexToRgb(hex) { const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex); return r ? { r: parseInt(r[1], 16), g: parseInt(r[2], 16), b: parseInt(r[3], 16) } : { r: 0, g: 0, b: 0 }; }
 
 async function saveProject() { if (state.ui.isResetting) return; const scenes = await Promise.all(state.project.scenes.map(async s => ({ name: s.name, songId: s.songId, backdrop: await serializeTarget(s.backdrop), actors: await Promise.all(s.actors.map(serializeTarget)) }))); localStorage.setItem('drag-n-film-project', JSON.stringify({ width: state.project.width, height: state.project.height, currentSceneIndex: state.project.currentSceneIndex, movieTitle: state.project.movieTitle, creatorName: state.project.creatorName, fontStyle: state.project.fontStyle, titleBgColor: state.project.titleBgColor, titleTextColor: state.project.titleTextColor, showTitleCard: state.project.showTitleCard, titleSongId: state.project.titleSongId, endCardEnabled: state.project.endCardEnabled, endCardText: state.project.endCardText, endCardTextColor: state.project.endCardTextColor, endCardTintColor: state.project.endCardTintColor, endSongId: state.project.endSongId, songs: state.project.songs, scenes })); }

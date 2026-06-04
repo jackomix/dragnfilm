@@ -26,3 +26,7 @@ temp_music.js
 original_app.js
 recovered_full_app.js
 app_restored.js
+
+# Project specific ignores
+GEMINI.md
+docs/
